@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.2 — Fix MCP Registry ownership marker casing
+
+No code changes. The `mcp-name` marker in the README (which becomes the PyPI
+package description used for the registry's ownership check) now matches the
+registry namespace casing exactly: `io.github.ALEXaquarius/grounded-reasoning`.
+The marker published with 0.1.1 used lowercase and the check is case-sensitive.
+
 ## 0.1.1 — MCP Registry metadata
 
 No code changes. Adds `server.json` and the `mcp-name` ownership marker in the

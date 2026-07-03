@@ -22,7 +22,7 @@ from src.agent import (
 from src.reasoning.conformal_reasoning import ConformalReasoner, conformal_threshold
 from src.reasoning.llm_client import LLMClient
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "GroundedReasoner",
