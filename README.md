@@ -3,6 +3,7 @@
 [![CI](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml/badge.svg)](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![PyPI](https://img.shields.io/pypi/v/grounded-reasoning.svg)](https://pypi.org/project/grounded-reasoning/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALEXaquarius/grounded-reasoning/blob/main/examples/quickstart.ipynb)
 
 > **TL;DR.** LLMs hallucinate on multi-hop relational reasoning. This is a
@@ -140,8 +141,11 @@ guard can't reach. `src/experiments/conformal_llm_eval.py`.
 ## Quickstart
 
 ```bash
+pip install grounded-reasoning
+
+# or, for development (tests + lint):
 git clone https://github.com/ALEXaquarius/grounded-reasoning
-cd grounded-reasoning && pip install -e ".[dev]"     # not yet on PyPI — install from source
+cd grounded-reasoning && pip install -e ".[dev]"
 pytest tests/                       # every theorem + offline-locked logic, no network needed
 
 # Use it right now (no LLM/network needed):

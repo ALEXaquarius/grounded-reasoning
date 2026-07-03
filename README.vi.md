@@ -3,6 +3,7 @@
 [![CI](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml/badge.svg)](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![PyPI](https://img.shields.io/pypi/v/grounded-reasoning.svg)](https://pypi.org/project/grounded-reasoning/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALEXaquarius/grounded-reasoning/blob/main/examples/quickstart.ipynb)
 
 Read in English: **[README.md](README.md)**
@@ -140,8 +141,11 @@ cứng không chạm tới được. `src/experiments/conformal_llm_eval.py`.
 ## Bắt đầu nhanh
 
 ```bash
+pip install grounded-reasoning
+
+# hoặc, để phát triển (test + lint):
 git clone https://github.com/ALEXaquarius/grounded-reasoning
-cd grounded-reasoning && pip install -e ".[dev]"     # chưa có trên PyPI — cài từ source
+cd grounded-reasoning && pip install -e ".[dev]"
 pytest tests/                       # mọi định lý + logic khóa offline, không cần mạng
 
 # Dùng ngay (không cần LLM/mạng):

@@ -94,13 +94,27 @@ language with zero configuration — `("Anh","cha","Bảo")`, `("父","是","祖
 ## 3. MCP server (for Claude / any MCP-compatible agent)
 
 ```bash
-pip install -e ".[mcp]"                   # from a clone of this repo (not yet on PyPI)
-python -m src.agent.mcp_server            # stdio MCP server
+pip install "grounded-reasoning[mcp]"
+grounded-reasoning-mcp                    # stdio MCP server (or: python -m src.agent.mcp_server)
 ```
 
 The server exposes exactly one tool, `verify_relation`. Point your MCP client
 configuration at the command above; the agent will see and call the tool like any
 other MCP tool.
+
+No permanent install needed — any MCP client (Claude Desktop, Cursor, ...) can
+launch it straight from PyPI via `uvx`:
+
+```json
+{
+  "mcpServers": {
+    "grounded-reasoning": {
+      "command": "uvx",
+      "args": ["--from", "grounded-reasoning[mcp]", "grounded-reasoning-mcp"]
+    }
+  }
+}
+```
 
 ---
 
