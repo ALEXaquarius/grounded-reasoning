@@ -3,6 +3,7 @@
 [![CI](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml/badge.svg)](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALEXaquarius/grounded-reasoning/blob/main/examples/quickstart.ipynb)
 
 Read in English: **[README.md](README.md)**
 
@@ -13,7 +14,7 @@ Read in English: **[README.md](README.md)**
 > Dùng được như **thư viện**, **function-calling tool**, hoặc **MCP server**. Đã kiểm
 > chứng trên **LLM thật** (DeepSeek…) và benchmark công khai **CLUTRR**.
 
-📄 Bài báo đầy đủ: **[PAPER.md](PAPER.md)** (tiếng Anh) · Hướng dẫn tích hợp: **[docs/integration.vi.md](docs/integration.vi.md)**
+📄 Bài báo đầy đủ: **[PAPER.md](PAPER.md)** (tiếng Anh) · Hướng dẫn tích hợp: **[docs/integration.vi.md](docs/integration.vi.md)** · Chạy thử trong 30 giây: **[notebook quickstart](https://colab.research.google.com/github/ALEXaquarius/grounded-reasoning/blob/main/examples/quickstart.ipynb)**
 
 ---
 

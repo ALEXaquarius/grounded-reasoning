@@ -3,6 +3,7 @@
 [![CI](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml/badge.svg)](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALEXaquarius/grounded-reasoning/blob/main/examples/quickstart.ipynb)
 
 > **TL;DR.** LLMs hallucinate on multi-hop relational reasoning. This is a
 > **relation-algebra verifier** an agent calls to check a claim *before* asserting it:
@@ -11,7 +12,7 @@
 > **function-calling tool**, or an **MCP server**. Validated on **real LLMs** (DeepSeek
 > et al.) and the public **CLUTRR** benchmark. See [docs/integration.md](docs/integration.md).
 
-📄 Full paper: **[PAPER.md](PAPER.md)** · Integration guide: **[docs/integration.md](docs/integration.md)**
+📄 Full paper: **[PAPER.md](PAPER.md)** · Integration guide: **[docs/integration.md](docs/integration.md)** · Try it in 30 seconds: **[quickstart notebook](https://colab.research.google.com/github/ALEXaquarius/grounded-reasoning/blob/main/examples/quickstart.ipynb)**
 
 Đọc bằng tiếng Việt: **[README.vi.md](README.vi.md)**
 
@@ -203,6 +204,7 @@ guarantee instead of hard precision.
 | `src/theory/theorems.py` | **Seven theorems (F–L)** with numerical verification |
 | `src/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo |
+| `examples/quickstart.ipynb` | Runnable tour of the library (offline, Colab-ready) |
 
 ---
 
