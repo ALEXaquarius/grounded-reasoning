@@ -1,7 +1,5 @@
 # Grounded, Guaranteed Reasoning for LLMs and Agents
 
-Đọc bằng tiếng Việt: **[PAPER.vi.md](PAPER.vi.md)**
-
 **Abstract.** Large language models are solid at recalling one-hop facts but
 degrade sharply on **multi-hop relational reasoning** — composing several facts
 into a conclusion. We present a **relation-algebra verifier** that checks a
@@ -381,8 +379,8 @@ a calibration set:
 
 | noise (p_drop) | coverage (target ≥ 0.90) | FPR (efficiency) |
 |------------------:|---------------------------:|---------------------:|
-| 0.0 | 0.896 ✓ | 0.52 |
-| 0.3 | 0.902 ✓ | 1.00 |
+| 0.0 | 0.896 | 0.52 |
+| 0.3 | 0.902 | 1.00 |
 
 Coverage stays ≥ 1−α at every noise level (validity, distribution-free) — a
 guarantee the hard guard cannot give on a dirty graph. The price is that
@@ -399,8 +397,8 @@ distractor sentences):
 
 | Text | LLM extraction (P / R) | Coverage (target ≥90%) | FPR (efficiency) |
 |------|---------------------------:|----------------------------:|---------------------:|
-| Easy | 100% / 99.7% | **91.3%** ✓ | 0.0 |
-| Hard | 99.5% / **68.5%** | **93.0%** ✓ | 0.77 |
+| Easy | 100% / 99.7% | **91.3%** | 0.0 |
+| Hard | 99.5% / **68.5%** | **93.0%** | 0.77 |
 
 When extraction drops 31% of the edges — a genuinely dirty, LLM-produced
 graph — the coverage guarantee ≥ 1−α still holds (93%); only efficiency
