@@ -1,5 +1,5 @@
 """
-Tests cho lớp tích hợp AGENT (GroundedReasoner + tool verify_relation). Offline.
+Tests for the AGENT integration layer (GroundedReasoner + verify_relation tool). Offline.
 """
 from src.agent import (
     GroundedReasoner,
@@ -31,15 +31,15 @@ class TestGroundedReasoner:
     def test_verify_any_relation_path(self):
         gr = GroundedReasoner()
         gr.add_facts([("a", "r1", "b"), ("b", "r2", "c")])
-        assert gr.verify("a", "c").grounded          # đường bất kỳ quan hệ
-        assert not gr.verify("c", "a").grounded       # có hướng
+        assert gr.verify("a", "c").grounded          # any-relation path
+        assert not gr.verify("c", "a").grounded       # directed
 
     def test_verify_via_is_relation_specific(self):
         gr = GroundedReasoner()
         gr.add_facts([("a", "parent", "b"), ("b", "owns", "c")])
-        # a→c KHÔNG grounded qua 'parent' (bước 2 là 'owns')
+        # a→c is NOT grounded via 'parent' (step 2 is 'owns')
         assert not gr.verify("a", "c", via="parent").grounded
-        assert gr.verify("a", "c").grounded           # nhưng grounded qua đường bất kỳ
+        assert gr.verify("a", "c").grounded           # but grounded via any-relation path
 
     def test_filter_claims_batch(self):
         gr = _kin()
@@ -52,7 +52,7 @@ class TestGroundedReasoner:
                       ("animal", "isa", "cat")])
         cyc = gr.contradictions("isa")
         assert cyc and set(cyc[0]) == {"cat", "mammal", "animal"}
-        # đồ thị nhất quán → không mâu thuẫn
+        # consistent graph → no contradiction
         gr2 = GroundedReasoner()
         gr2.add_facts([("cat", "isa", "mammal"), ("mammal", "isa", "animal")])
         assert gr2.contradictions("isa") == []
@@ -84,7 +84,7 @@ class TestTool:
 
 class TestMultilingual:
     def test_unicode_entities_and_relations(self):
-        # tiếng Việt / Trung / Ả Rập — entity là chuỗi opaque ⟹ language-agnostic
+        # Vietnamese / Chinese / Arabic — entities are opaque strings ⟹ language-agnostic
         gr = GroundedReasoner()
         gr.add_facts([("Anh", "cha", "Bảo"), ("Bảo", "cha", "Cường")])
         v = gr.verify("Anh", "Cường", via="cha")

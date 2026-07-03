@@ -1,6 +1,6 @@
 """
-Test OFFLINE cho solver hợp thành CLUTRR (path_relations + solve) — không gọi mạng.
-Dùng bảng hợp thành thủ công + row giả để khóa LOGIC fold (Định lý G trên dữ liệu).
+OFFLINE test for the CLUTRR composition solver (path_relations + solve) — no network calls.
+Uses a manual composition table + fake rows to lock down the fold LOGIC (Theorem G on data).
 """
 from src.experiments.clutrr_eval import (
     clean_chain,
@@ -12,12 +12,12 @@ from src.experiments.clutrr_eval import (
 
 def test_path_relations_shortest():
     row = {
-        "story_edges": "[(0, 1), (1, 2), (2, 3), (3, 1)]",  # có cạnh lùi (3→1)
+        "story_edges": "[(0, 1), (1, 2), (2, 3), (3, 1)]",  # has a back edge (3→1)
         "edge_types": "['son', 'daughter', 'mother', 'x']",
         "query_edge": "(0, 2)",
     }
     rels = path_relations(row)
-    assert rels == [("son", 1), ("daughter", 2)]  # đường ngắn nhất 0→1→2
+    assert rels == [("son", 1), ("daughter", 2)]  # shortest path 0→1→2
 
 
 def test_path_relations_self_cycle_regression():
