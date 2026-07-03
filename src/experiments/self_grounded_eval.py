@@ -1,20 +1,23 @@
 """
-Self-Grounded Deductive Consistency (SGDC) — kiểm chứng ảo giác KHÔNG cần tri thức
-ngoài, khai thác bất đối xứng độ tin cậy của LLM (fact nguyên tử vững, hợp thành ảo).
+Self-Grounded Deductive Consistency (SGDC) — hallucination verification WITHOUT
+external knowledge, exploiting the LLM's confidence asymmetry (atomic facts are
+reliable, compositions hallucinate).
 
-Giao thức (2 lời gọi LLM, KHÔNG dùng ground truth ngoài để lọc):
-  1. Hỏi LLM các FACT NGUYÊN TỬ (1-bước) của một thế giới — bước LLM ĐÁNG TIN.
-  2. Hỏi LLM các KẾT LUẬN NHIỀU BƯỚC (đóng kín bắc cầu) — bước LLM HAY ẢO GIÁC.
-  3. Dựng toán tử từ CHÍNH fact nguyên tử của LLM; tính đóng kín được chứng nhận.
-  4. SGDC: bác bỏ mọi kết luận multi-hop nằm NGOÀI đóng kín của chính LLM.
+Protocol (2 LLM calls, ground truth is NEVER used to filter):
+  1. Ask the LLM for the ATOMIC (1-hop) FACTS of a world — the step the LLM is RELIABLE at.
+  2. Ask the LLM for MULTI-HOP CONCLUSIONS (transitive closure) — the step the LLM
+     tends to HALLUCINATE at.
+  3. Build an operator from the LLM's OWN atomic facts; compute the certified closure.
+  4. SGDC: reject any multi-hop conclusion that falls OUTSIDE the LLM's own closure.
 
-Đánh giá (ground truth CHỈ để chấm điểm, KHÔNG để lọc): SGDC có khôi phục precision
-như dùng đồ thị ngoài không? Nếu có ⟹ không cần đồ thị ngoài (xóa giới hạn cốt lõi).
+Evaluation (ground truth is used ONLY for scoring, NEVER for filtering): does SGDC
+recover the same precision as using an external graph? If so ⟹ no external graph
+is needed (removes a core limitation).
 
-Điều kiện sống-còn (falsifiable): precision fact nguyên tử phải > precision multi-hop.
-Nếu fact nguyên tử cũng ảo giác nặng ⟹ SGDC vô dụng (ghi lại trung thực).
+Survival condition (falsifiable): atomic-fact precision must exceed multi-hop precision.
+If atomic facts also hallucinate heavily ⟹ SGDC is useless (recorded honestly).
 
-Chạy: DEEPSEEK_API_KEY=... python -m src.experiments.self_grounded_eval
+Run: DEEPSEEK_API_KEY=... python -m src.experiments.self_grounded_eval
 """
 from __future__ import annotations
 
@@ -24,13 +27,13 @@ import re
 from src.reasoning.operator_algebra import OperatorRelationAlgebra
 from src.reasoning.relation_spectrum import is_acyclic, spectral_radius
 
-# Thế giới đóng THẬT (ground truth để CHẤM, không đưa vào prompt lọc).
+# The REAL closed world (ground truth for SCORING; never used to filter prompts).
 GROUND = [
     ("sparrow", "bird"), ("bird", "vertebrate"), ("vertebrate", "animal"),
     ("animal", "organism"), ("organism", "entity"),
     ("salmon", "fish"), ("fish", "vertebrate"),
     ("oak", "tree"), ("tree", "plant"), ("plant", "organism"),
-    ("whale", "fish"),  # bẫy phản-tri-thức
+    ("whale", "fish"),  # anti-commonsense trap
 ]
 
 
@@ -49,7 +52,7 @@ def _universe():
 
 
 def _parse_pairs(text, universe):
-    """Trích các cặp [x,y] nghĩa 'x is a y' từ JSON."""
+    """Extract [x,y] pairs meaning 'x is a y' from JSON."""
     m = re.search(r"\[.*\]", text, re.S)
     pairs = []
     if m:
@@ -72,7 +75,7 @@ def run(model: str = "deepseek-chat", verbose: bool = True):
     concepts = sorted(universe)
     client = DeepSeekClient(model=model)
 
-    # ---- 1. LLM đưa FACT NGUYÊN TỬ (1-bước) ----
+    # ---- 1. LLM provides ATOMIC FACTS (1-hop) ----
     atom_prompt = (
         "Consider these concepts: " + ", ".join(concepts) + ".\n"
         "State ONLY the DIRECT, one-step 'is a' facts among them that you are confident "
@@ -81,18 +84,18 @@ def run(model: str = "deepseek-chat", verbose: bool = True):
     )
     atom_pairs = _parse_pairs(client.ask(atom_prompt, temperature=0.0), universe)
 
-    # đồ thị TỰ-GROUNDED từ chính LLM
+    # SELF-GROUNDED graph from the LLM's own facts
     llm_alg = OperatorRelationAlgebra()
     for a, b in atom_pairs:
         llm_alg.add(a, "is a", b)
 
-    # độ tin cậy fact nguyên tử (chấm bằng ground truth 1-bước)
+    # atomic-fact reliability (scored against the 1-hop ground truth)
     gt_atoms = set(GROUND)
     atom_tp = len(set(atom_pairs) & gt_atoms)
     atom_fp = len(set(atom_pairs) - gt_atoms)
     atom_prec = atom_tp / max(atom_tp + atom_fp, 1)
 
-    # ---- 2. LLM đưa KẾT LUẬN NHIỀU BƯỚC (đóng kín) ----
+    # ---- 2. LLM provides MULTI-HOP CONCLUSIONS (transitive closure) ----
     srcs = sorted({a for a, _ in GROUND})
     multi_claims: dict[str, set[str]] = {}
     for x in srcs:
@@ -111,7 +114,7 @@ def run(model: str = "deepseek-chat", verbose: bool = True):
                 pass
         multi_claims[x] = s
 
-    # ---- 3+4. chấm: raw vs SGDC (lọc bằng đóng kín của CHÍNH LLM) vs external ----
+    # ---- 3+4. score: raw vs SGDC (filtered by the LLM's OWN closure) vs external ----
     def score(filter_alg):
         tp = fp = fn = 0
         for x in srcs:
@@ -127,10 +130,10 @@ def run(model: str = "deepseek-chat", verbose: bool = True):
         return tp / max(tp + fp, 1), tp / max(tp + fn, 1)
 
     raw_p, raw_r = score(None)
-    sgdc_p, sgdc_r = score(llm_alg)      # lọc bằng đồ thị TỰ LLM (không tri thức ngoài)
-    ext_p, ext_r = score(truth)          # lọc bằng đồ thị ngoài (trần trên)
+    sgdc_p, sgdc_r = score(llm_alg)      # filtered by the LLM's OWN graph (no external knowledge)
+    ext_p, ext_r = score(truth)          # filtered by the external graph (upper bound)
 
-    # ---- spectral: LLM có tự khẳng định chu trình mâu thuẫn không? ----
+    # ---- spectral: did the LLM assert a contradictory cycle on its own? ----
     A = llm_alg.operator("is a").astype(float).T if atom_pairs else None
     contradiction_cycle = (not is_acyclic(A)) if A is not None and A.size else False
     rho = round(spectral_radius(A), 6) if A is not None and A.size else 0.0
@@ -143,15 +146,15 @@ def run(model: str = "deepseek-chat", verbose: bool = True):
         "external_precision": round(ext_p, 4), "external_recall": round(ext_r, 4),
         "llm_asserted_contradiction_cycle": contradiction_cycle,
         "spectral_radius_llm_graph": rho,
-        "survival_condition": atom_prec > raw_p,  # điều kiện sống-còn của SGDC
+        "survival_condition": atom_prec > raw_p,  # SGDC's survival condition
     }
     if verbose:
         print(json.dumps(res, indent=2))
         print(
-            f"\nBất đối xứng: precision fact nguyên tử={atom_prec:.0%} vs multi-hop thô="
-            f"{raw_p:.0%}.  SGDC (tự-grounded, 0 tri thức ngoài): precision "
-            f"{raw_p:.0%}→{sgdc_p:.0%} (trần ngoài={ext_p:.0%}).  "
-            f"{'✔ SGDC hiệu lực' if res['survival_condition'] and sgdc_p >= raw_p else '✘ ghi nhận thất bại'}"
+            f"\nAsymmetry: atomic-fact precision={atom_prec:.0%} vs raw multi-hop="
+            f"{raw_p:.0%}.  SGDC (self-grounded, 0 external knowledge): precision "
+            f"{raw_p:.0%}→{sgdc_p:.0%} (external upper bound={ext_p:.0%}).  "
+            f"{'✔ SGDC effective' if res['survival_condition'] and sgdc_p >= raw_p else '✘ failure recorded'}"
         )
     return res
 

@@ -1,15 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Ví dụ: LLM có BỊA khi suy diễn quan hệ nhiều bước không, và hệ grounded khác ra sao?
+Demo: does an LLM FABRICATE answers on multi-hop relational inference, and how
+does the grounded system compare?
 
-Cho một đoạn văn tự nhiên chứa một chuỗi quản lý/sở hữu SÂU (9 bước), tên dễ nhầm và
-các mắt xích kể LỘN XỘN. Hỏi LLM các câu suy diễn nhiều bước (gồm câu NGƯỢC HƯỚNG —
-nơi LLM hay bịa), rồi so với hệ grounded (đại số quan hệ, 0 token, có bằng chứng).
+The test passage below describes a DEEP (9-step) management/ownership chain,
+with easily-confused names and the links told OUT OF ORDER. We ask the LLM
+multi-hop inference questions (including REVERSED-DIRECTION questions — exactly
+where LLMs tend to fabricate), then compare against the grounded system
+(relation algebra, 0 tokens, with a proof).
 
-Kết quả điển hình: LLM đúng chuỗi thuận nhưng BỊA ở câu ngược hướng; hệ grounded 10/10.
+Typical result: the LLM gets the forward chain right but FABRICATES on the
+reversed-direction questions; the grounded system scores 10/10.
 
-Chạy:  DEEPSEEK_API_KEY=... python examples/hallucination_demo.py
-       (hoặc LLM_PROVIDER=groq/openai/... — xem grounded_reasoning.LLMClient)
+Note: the test passage, names, and questions below are intentionally kept in
+Vietnamese. This is the exact scenario that produced the "10/10 vs. fabricates
+2/10" result cited in the README/PAPER — translating it would change what the
+LLM is actually asked and invalidate that reproducible result. It also doubles
+as a demonstration of the library's multilingual design: entities/relations are
+opaque Unicode strings, so the grounded verifier works identically regardless
+of language.
+
+Run:  DEEPSEEK_API_KEY=... python examples/hallucination_demo.py
+      (or LLM_PROVIDER=groq/openai/... — see grounded_reasoning.LLMClient)
 """
 from __future__ import annotations
 
@@ -18,12 +30,12 @@ import time
 
 from grounded_reasoning import GroundedReasoner, LLMClient
 
-# --- Thế giới (ground truth, để chấm) ---
+# --- The world (ground truth, used for scoring) ---
 CHAIN = ["Tùng", "Trung", "Tuấn", "Tân", "Thành", "Thắng", "Thịnh", "Toàn", "Tú", "Vũ"]
 OWN = ["Tùng", "Sao Mai", "Việt Long", "Đông Đô", "Ba Vì", "Kho K9"]
 FACTS = (
-    [(CHAIN[i], "quản lý", CHAIN[i + 1]) for i in range(len(CHAIN) - 1)]
-    + [(OWN[i], "sở hữu", OWN[i + 1]) for i in range(len(OWN) - 1)]
+    [(CHAIN[i], "quản lý", CHAIN[i + 1]) for i in range(len(CHAIN) - 1)]   # "quản lý" = manages
+    + [(OWN[i], "sở hữu", OWN[i + 1]) for i in range(len(OWN) - 1)]        # "sở hữu" = owns
 )
 
 PASSAGE = """
@@ -42,7 +54,7 @@ Ba Vì, và xưởng Ba Vì sở hữu kho hàng mang mã Kho K9. Nhiều đối
 đảo ngược các quan hệ này để gây nhiễu thông tin.
 """.strip()
 
-# (subject, object, via, mô tả, đáp án đúng)
+# (subject, object, via, question text (Vietnamese, see module docstring), correct answer)
 QUESTIONS = [
     ("Tùng", "Vũ", "quản lý", "Ông Tùng có quản lý (gián tiếp) anh Vũ không?", True),
     ("Thành", "Vũ", "quản lý", "Anh Thành có quản lý (gián tiếp) anh Vũ không?", True),
@@ -56,6 +68,9 @@ QUESTIONS = [
 
 
 def _ask(client: LLMClient, question: str, tries: int = 6) -> tuple[bool, str]:
+    # Prompt is in Vietnamese to match PASSAGE/QUESTIONS (see module docstring for why).
+    # It instructs the model: "read the passage carefully, answer the first line with
+    # exactly one word: CÓ (yes) or KHÔNG (no), then give a short explanation."
     prompt = (
         f"Đọc kỹ đoạn văn sau và CHỈ dựa vào nó:\n\n{PASSAGE}\n\n"
         f"Câu hỏi: {question}\n"
@@ -80,7 +95,7 @@ def main() -> None:
     gr.add_facts(FACTS)
 
     print("=" * 74)
-    print(f"LLM ({client.model}) suy luận tự do  vs  HỆ GROUNDED (0 token, có bằng chứng)")
+    print(f"LLM ({client.model}) free-form reasoning  vs  GROUNDED SYSTEM (0 tokens, with proof)")
     print("=" * 74)
     llm_ok = gr_ok = halluc = 0
     for subj, obj, via, desc, gold in QUESTIONS:
@@ -90,16 +105,16 @@ def main() -> None:
         llm_ok += a
         gr_ok += b
         halluc += 0 if a else 1
-        proof = "→".join(v.proof) if v.proof else "— (không có đường)"
+        proof = "→".join(v.proof) if v.proof else "— (no path)"
         print(f"\nQ: {desc}")
-        print(f"   đúng={'CÓ' if gold else 'KHÔNG':5} | "
-              f"LLM={'CÓ' if llm_yes else 'KHÔNG':5} {'OK' if a else 'BỊA/SAI'} | "
-              f"hệ={'CÓ' if v.grounded else 'KHÔNG':5} {'OK' if b else 'X'}")
-        print(f"   bằng chứng hệ: {proof}")
+        print(f"   correct={'YES' if gold else 'NO':5} | "
+              f"LLM={'YES' if llm_yes else 'NO':5} {'OK' if a else 'FABRICATED/WRONG'} | "
+              f"guard={'YES' if v.grounded else 'NO':5} {'OK' if b else 'X'}")
+        print(f"   guard's proof: {proof}")
     n = len(QUESTIONS)
     print("\n" + "=" * 74)
-    print(f"LLM đúng {llm_ok}/{n} (bịa/sai {halluc})  |  "
-          f"Hệ grounded đúng {gr_ok}/{n}, 0 token, có bằng chứng")
+    print(f"LLM correct {llm_ok}/{n} (fabricated/wrong {halluc})  |  "
+          f"Grounded system correct {gr_ok}/{n}, 0 tokens, with proof")
     print(f"LLM tokens: {client.total_tokens}")
 
 

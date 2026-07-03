@@ -1,18 +1,18 @@
 """
-A/B suy diễn trừu tượng: so 3 chiến lược trên một benchmark suy diễn nhiều bước.
+Abstract inference A/B test: compares 3 strategies on a multi-hop inference benchmark.
 
-Câu hỏi khoa học: trên bài toán suy ra quan hệ GIÁN TIẾP (a→b qua ≤K bước), ba
-cách hành xử khác nhau thế nào về (i) độ phủ suy diễn sâu và (ii) tỉ lệ ẢO GIÁC
-(khẳng định quan hệ KHÔNG tồn tại)?
+Scientific question: on the problem of inferring an INDIRECT relation (a→b via ≤K
+hops), how do three different behaviors compare on (i) deep-inference coverage and
+(ii) HALLUCINATION rate (asserting a relation that does NOT exist)?
 
-  A. ONE-HOP  — mô phỏng "tương tự 1-bước" của embedding: chỉ thấy hàng xóm trực
-     tiếp. Không bao giờ ảo giác nhưng KHÔNG suy được chuỗi.
-  B. FUZZY    — FuzzyInferenceEngine (khuếch tán, có kiểm soát): suy chuỗi sâu,
-     grounded (Định lý no-false-bridge) → 0 ảo giác.
-  C. GUESSER  — mô phỏng "LLM tự tin ảo giác": đoán mọi cặp gần nhau về chỉ số là
-     có quan hệ. Phủ cao nhưng ảo giác nhiều.
+  A. ONE-HOP  — simulates the "1-hop similarity" of embeddings: only sees direct
+     neighbors. Never hallucinates but CANNOT infer chains.
+  B. FUZZY    — FuzzyInferenceEngine (controlled diffusion): infers deep chains,
+     grounded (no-false-bridge theorem) → 0 hallucinations.
+  C. GUESSER  — simulates an "overconfident hallucinating LLM": guesses that any
+     pair close in index is related. High coverage but many hallucinations.
 
-Chạy: python -m src.experiments.inference_eval
+Run: python -m src.experiments.inference_eval
 """
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ from src.reasoning.abstract_inference import FuzzyInferenceEngine
 
 
 def build_chain_world(n_concepts: int = 120, seed: int = 0):
-    """Thế giới khái niệm: nhiều CHUỖI quan hệ có hướng độ dài khác nhau.
+    """Concept world: many directed relation CHAINS of varying length.
 
-    Trả về (n, engine, truth) với truth[(u,v)] = khoảng cách hop nhỏ nhất > 0
-    (ground-truth reachability trên đồ thị có hướng).
+    Returns (n, engine, truth) with truth[(u,v)] = smallest hop distance > 0
+    (ground-truth reachability on the directed graph).
     """
     rng = random.Random(seed)
     edges: dict[int, list[int]] = {}
@@ -64,8 +64,8 @@ def evaluate(seed: int = 0):
     n, eng, edges, truth = build_chain_world(seed=seed)
     onehop = {u: set(vs) for u, vs in edges.items()}
 
-    # GUESSER "ảo giác": đoán có quan hệ nếu chỉ số v nằm trong cửa sổ [u+1, u+8]
-    # (bắt chước sự tự tin ngây thơ dựa trên "gần nhau" mà không kiểm chứng đường).
+    # "Hallucinating" GUESSER: guesses a relation exists if index v falls in the
+    # window [u+1, u+8] (mimics naive confidence based on "closeness" without path verification).
     def guesser_reach(u: int) -> set[int]:
         return {v for v in range(u + 1, min(u + 9, n))}
 
@@ -79,7 +79,7 @@ def evaluate(seed: int = 0):
     results = {}
     for name, reach in strategies.items():
         deep_hit = sum(1 for a, b in deep_pairs if b in reach(a))
-        # ảo giác: khẳng định (a,b) có quan hệ trong khi (a,b) không thuộc truth
+        # hallucination: asserting (a,b) is related when (a,b) is not in truth
         false_pos = checked = 0
         for a in range(n):
             r = reach(a)
@@ -98,14 +98,15 @@ def evaluate(seed: int = 0):
 
 def main() -> None:
     res = evaluate(seed=0)
-    print("A/B SUY DIỄN NHIỀU BƯỚC (đồ thị chuỗi khái niệm, seed=0)\n")
-    print(f"{'chiến lược':<12} {'suy-sâu-recall(≥4hop)':>22} {'tỉ lệ ẢO GIÁC':>16}")
+    print("MULTI-HOP INFERENCE A/B TEST (concept-chain graph, seed=0)\n")
+    print(f"{'strategy':<12} {'deep-recall(>=4hop)':>22} {'HALLUCINATION rate':>16}")
     for name, m in res.items():
         print(f"{name:<12} {m['deep_recall']:>22.2%} {m['halluc_rate']:>16.2%}")
     print(
-        "\nDiễn giải: One-hop KHÔNG ảo giác nhưng suy sâu = 0%. Guesser phủ cao "
-        "nhưng ảo giác lớn.\nFuzzy: suy sâu 100% VÀ ảo giác 0% — grounded diffusion "
-        "(Định lý no-false-bridge)."
+        "\nInterpretation: One-hop does NOT hallucinate but deep inference = 0%. "
+        "Guesser has high coverage but hallucinates heavily.\n"
+        "Fuzzy: deep inference 100% AND hallucination 0% — grounded diffusion "
+        "(no-false-bridge theorem)."
     )
 
 

@@ -1,13 +1,14 @@
 """
-DEMO FUNCTION-CALLING THẬT: agent tự KIỂM CHỨNG suy luận quan hệ trước khi trả lời.
+REAL FUNCTION-CALLING DEMO: the agent self-VERIFIES relational reasoning before answering.
 
-Kịch bản: agent biết vài fact họ hàng 1-bước; người dùng hỏi câu quan hệ NHIỀU BƯỚC
-(dễ ảo giác). Agent được cấp tool `verify_relation` (backed bởi GroundedReasoner) và
-buộc gọi tool trước khi khẳng định ⟹ claim grounded thì xác nhận, ảo giác thì từ chối.
+Scenario: the agent knows a few 1-hop kinship facts; the user asks a MULTI-HOP
+relational question (prone to hallucination). The agent is given the `verify_relation`
+tool (backed by GroundedReasoner) and is required to call it before asserting anything
+⟹ grounded claims are confirmed, hallucinated ones are rejected.
 
-Đa-provider (OpenAI-compatible): DeepSeek/OpenAI/Groq/OpenRouter/Together/Mistral/Ollama.
-    python -m src.experiments.agent_demo                    # DeepSeek (mặc định)
-    LLM_PROVIDER=groq python -m src.experiments.agent_demo  # provider khác
+Multi-provider (OpenAI-compatible): DeepSeek/OpenAI/Groq/OpenRouter/Together/Mistral/Ollama.
+    python -m src.experiments.agent_demo                    # DeepSeek (default)
+    LLM_PROVIDER=groq python -m src.experiments.agent_demo  # other provider
 """
 from __future__ import annotations
 
@@ -16,15 +17,15 @@ import os
 
 from src.agent import GroundedReasoner
 
-# KB: chuỗi họ hàng 1-bước (agent "biết"); KHÔNG có đường Ann→Frank.
+# KB: 1-hop kinship chain (the agent "knows" this); there is NO path Ann→Frank.
 FACTS = [
     ("Ann", "parent", "Bill"),
     ("Bill", "parent", "Carol"),
     ("Carol", "parent", "Dan"),
-    ("Eve", "parent", "Frank"),   # cụm rời — Ann KHÔNG là tổ tiên Frank
+    ("Eve", "parent", "Frank"),   # disconnected component — Ann is NOT an ancestor of Frank
 ]
 
-# Tool backed bởi KB: model chỉ truyền claim, đồ thị nằm trong tool (mẫu thực tế).
+# Tool backed by the KB: the model only passes the claim, the graph lives in the tool (realistic pattern).
 _GR = GroundedReasoner()
 _GR.add_facts(FACTS)
 
@@ -82,7 +83,7 @@ def ask_agent(client, question: str, max_turns: int = 5, verbose: bool = True) -
                 "role": "tool", "tool_call_id": call["id"],
                 "content": json.dumps(result),
             })
-    return "(hết lượt)"
+    return "(out of turns)"
 
 
 def run(provider: str | None = None, verbose: bool = True):
@@ -93,7 +94,7 @@ def run(provider: str | None = None, verbose: bool = True):
     if verbose:
         print(f"Provider: {provider} | model: {client.model}\n")
     q1 = "Is Ann an ancestor of Dan?"        # grounded (Ann→Bill→Carol→Dan)
-    q2 = "Is Ann an ancestor of Frank?"      # ảo giác-bait (không có đường)
+    q2 = "Is Ann an ancestor of Frank?"      # hallucination bait (no such path)
     a1 = ask_agent(client, q1, verbose=verbose)
     a2 = ask_agent(client, q2, verbose=verbose)
     if verbose:

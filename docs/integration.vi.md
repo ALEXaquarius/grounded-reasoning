@@ -92,7 +92,7 @@ không cần cấu hình — `("Anh","cha","Bảo")`, `("父","是","祖父")`, 
 ## 3. MCP server (cho Claude / agent tương thích MCP)
 
 ```bash
-pip install "grounded-reasoning[mcp]"
+pip install -e ".[mcp]"                   # từ bản clone repo này (chưa có trên PyPI)
 python -m src.agent.mcp_server            # stdio MCP server
 ```
 

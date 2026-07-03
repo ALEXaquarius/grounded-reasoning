@@ -1,17 +1,18 @@
 """
-Chặn ảo giác trên LLM THẬT với QUAN HỆ NGÔN NGỮ TỰ NHIÊN nhiều loại.
+Hallucination blocking on a REAL LLM with several kinds of NATURAL-LANGUAGE RELATIONS.
 
-Khác guard_llm_eval (chỉ kinship): ở đây dùng ba quan hệ ngôn ngữ thật —
-  • "is a"     (phân loại / taxonomy)   — bắc cầu: sparrow is-a bird is-a animal
-  • "causes"   (nhân quả)               — bắc cầu: virus causes fever causes …
-  • "part of"  (bộ phận / meronymy)     — bắc cầu: piston part-of engine part-of car
+Unlike guard_llm_eval (kinship only): here we use three real-language relations —
+  • "is a"     (classification / taxonomy) — transitive: sparrow is-a bird is-a animal
+  • "causes"   (causation)                 — transitive: virus causes fever causes …
+  • "part of"  (meronymy)                  — transitive: piston part-of engine part-of car
 
-Thế giới ĐÓNG (closed-world): LLM chỉ được dùng các fact 1-bước đưa vào; mọi khẳng
-định ngoài đó là ẢO GIÁC (kể cả khi "đúng" theo tri thức ngoài). Ground truth và
-guard = đóng kín bắc cầu của OperatorRelationAlgebra (Định lý G). Các quan hệ đều
-ACYCLIC ⟹ toán tử NILPOTENT (Định lý H) ⟹ đóng kín dừng hữu hạn.
+CLOSED world: the LLM may only use the given 1-hop facts; any assertion beyond that
+is a HALLUCINATION (even if it happens to be "true" by outside knowledge). Ground
+truth and the guard = the transitive closure of OperatorRelationAlgebra (Theorem G).
+All relations are ACYCLIC ⟹ the operator is NILPOTENT (Theorem H) ⟹ the closure
+terminates in finitely many steps.
 
-Chạy: DEEPSEEK_API_KEY=... python -m src.experiments.nl_ontology_eval
+Run: DEEPSEEK_API_KEY=... python -m src.experiments.nl_ontology_eval
 """
 from __future__ import annotations
 
@@ -21,18 +22,19 @@ import re
 from src.reasoning.operator_algebra import OperatorRelationAlgebra
 from src.reasoning.relation_spectrum import is_acyclic, spectral_radius
 
-# Thế giới đóng HƠN & KHÓ HƠN: chuỗi dài (4-6 bước) + BẪY phản-tri-thức (fact đúng
-# trong thế giới đóng nhưng NGƯỢC tri thức thật, để dụ LLM nhập kiến thức ngoài =
-# ảo giác). Mọi quan hệ vẫn ACYCLIC (Định lý H: nilpotent).
+# A MORE CLOSED & HARDER world: long chains (4-6 hops) + anti-commonsense TRAPS
+# (facts that hold in this closed world but CONTRADICT real-world knowledge, to
+# tempt the LLM into importing outside knowledge = hallucination). All relations
+# remain ACYCLIC (Theorem H: nilpotent).
 FACTS: dict[str, list[tuple[str, str]]] = {
     "is a": [
         ("sparrow", "bird"), ("bird", "vertebrate"), ("vertebrate", "animal"),
         ("animal", "organism"), ("organism", "entity"),
         ("salmon", "fish"), ("fish", "vertebrate"),
         ("oak", "tree"), ("tree", "plant"), ("plant", "organism"),
-        # BẪY phản-tri-thức: trong thế giới này whale is-a fish (thật: mammal)
+        # anti-commonsense TRAP: in this world whale is-a fish (real: mammal)
         ("whale", "fish"),
-        # BẪY: penguin KHÔNG nối lên bird ở đây — chỉ tới "flightless"
+        # TRAP: penguin does NOT connect up to bird here — only to "flightless"
         ("penguin", "flightless"), ("flightless", "creature"),
     ],
     "causes": [
@@ -67,9 +69,9 @@ def build():
 
 
 def spectral_report(alg) -> dict:
-    """Định lý H: mỗi quan hệ ontology acyclic ⟹ toán tử nilpotent (ρ=0)."""
+    """Theorem H: each acyclic ontology relation ⟹ nilpotent operator (ρ=0)."""
     out = {}
-    names = alg._names  # noqa: SLF001 (kiểm chứng nội bộ)
+    names = alg._names  # noqa: SLF001 (internal check)
     for rel in FACTS:
         A = alg.operator(rel).astype(float).T  # A[i,j]=1 ⟺ i--rel-->j
         out[rel] = {"acyclic": is_acyclic(A), "spectral_radius": round(spectral_radius(A), 9)}
@@ -77,7 +79,7 @@ def spectral_report(alg) -> dict:
 
 
 def make_queries(alg, concepts):
-    """Câu bắc cầu: 'mọi Y mà X <rel> (mọi cấp)'. Đáp án = đóng kín."""
+    """Transitive queries: 'every Y such that X <rel> Y (all levels)'. Answer = closure."""
     q = []
     for rel in FACTS:
         srcs = {a for a, _ in FACTS[rel]}
@@ -119,8 +121,8 @@ ABSTRACT_WORDS = [
 
 
 def build_dense_dag(seed: int = 3, n: int = 22):
-    """DAG DÀY từ khái niệm TRỪU TƯỢNG (không dựa tri thức ngoài) — mỗi đỉnh nối
-    lên 1-2 đỉnh trước ⟹ đóng kín bắc cầu LỚN. Vẫn acyclic (Định lý H)."""
+    """A DENSE DAG over ABSTRACT concepts (not reliant on outside knowledge) — each
+    node connects up to 1-2 earlier nodes ⟹ a LARGE transitive closure. Still acyclic (Theorem H)."""
     import random
 
     rng = random.Random(seed)
@@ -137,7 +139,7 @@ def build_dense_dag(seed: int = 3, n: int = 22):
 
 
 def run_dense(seed: int = 3, top_k: int = 8, model: str = "deepseek-chat", verbose: bool = True):
-    """Kịch bản KHÓ: đóng kín bắc cầu trên DAG dày, khái niệm trừu tượng."""
+    """HARD scenario: transitive closure over a dense DAG of abstract concepts."""
     from src.reasoning.llm_client import DeepSeekClient
 
     alg, words, edges = build_dense_dag(seed)
@@ -179,8 +181,8 @@ def run_dense(seed: int = 3, top_k: int = 8, model: str = "deepseek-chat", verbo
     if verbose:
         print(json.dumps(res, indent=2))
         print(
-            f"\nDAG dày trừu tượng: LLM SỤP về precision={lp:.2%} (ảo giác {llm_fp}, "
-            f"over-claim). Guard bắt {llm_fp - leak}/{llm_fp}, dropped_true={drop} "
+            f"\nDense abstract DAG: LLM precision COLLAPSES to {lp:.2%} ({llm_fp} hallucinations, "
+            f"over-claiming). Guard catches {llm_fp - leak}/{llm_fp}, dropped_true={drop} "
             f"⟹ precision=100%."
         )
     return res
@@ -203,7 +205,7 @@ def run(model: str = "deepseek-chat", verbose: bool = True):
         llm_tp += len(claimed & truth)
         llm_fp += len(claimed - truth)
         llm_fn += len(truth - claimed)
-        kept = {c for c in claimed if c in alg.closure(x, rel)}  # guard: đường đi grounded
+        kept = {c for c in claimed if c in alg.closure(x, rel)}  # guard: grounded path exists
         g_tp += len(kept & truth)
         g_fp += len(kept - truth)
         g_fn += len(truth - kept)
@@ -225,10 +227,10 @@ def run(model: str = "deepseek-chat", verbose: bool = True):
     if verbose:
         print(json.dumps(res, indent=2))
         print(
-            f"\nMỗi quan hệ ontology ACYCLIC (ρ=0, nilpotent) — Định lý H.\n"
-            f"LLM thô: precision={lp:.2%} (ảo giác {llm_fp}).  "
-            f"Sau GUARD: precision={gp:.2%} "
-            f"(bắt {llm_fp - g_fp}/{llm_fp}, lọt {g_fp}, loại nhầm đúng {dropped_true})."
+            f"\nEvery ontology relation is ACYCLIC (ρ=0, nilpotent) — Theorem H.\n"
+            f"Raw LLM: precision={lp:.2%} ({llm_fp} hallucinations).  "
+            f"After GUARD: precision={gp:.2%} "
+            f"(caught {llm_fp - g_fp}/{llm_fp}, {g_fp} leaked through, {dropped_true} correct answers wrongly dropped)."
         )
     return res
 

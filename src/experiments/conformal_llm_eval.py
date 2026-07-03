@@ -1,17 +1,19 @@
 """
-DEMO END-TO-END: Conformal Reasoning trên LLM THẬT.
+END-TO-END DEMO: Conformal Reasoning on a REAL LLM.
 
-Chuỗi: (1) sinh ontology "is a" có ground-truth (DAG, reachability không tầm thường);
-(2) render thành VĂN BẢN TỰ NHIÊN (câu đa dạng + câu nhiễu); (3) DeepSeek TRÍCH đồ
-thị quan hệ từ văn bản — bước này SINH NHIỄU THẬT (bỏ sót/thêm cạnh); (4) khuếch tán
-trên đồ thị LLM-trích cho điểm conf; (5) Conformal hiệu chỉnh ngưỡng ⟹ BẢO ĐẢM phủ
-≥ 1−α cho truy vấn reachability nhiều bước, BẤT CHẤP lỗi trích.
+Pipeline: (1) generate an "is a" ontology with ground truth (DAG, non-trivial
+reachability); (2) render it as NATURAL-LANGUAGE TEXT (varied sentences + noise
+sentences); (3) DeepSeek EXTRACTS the relation graph from the text — this step
+introduces REAL NOISE (missing/spurious edges); (4) diffuse over the LLM-extracted
+graph to get confidence scores; (5) Conformal calibration of the threshold ⟹
+GUARANTEES coverage ≥ 1−α for multi-hop reachability queries, REGARDLESS of
+extraction errors.
 
-Điểm mấu chốt: guard cứng cần đồ thị SẠCH; ở đây đồ thị đến từ LLM (bẩn) nhưng
-conformal vẫn cho bảo đảm phủ phân-phối-tự-do. Ground truth chỉ để CHẤM, không đưa
-vào bước trích.
+Key point: a hard guard needs a CLEAN graph; here the graph comes from the LLM
+(noisy) yet conformal prediction still gives a distribution-free coverage guarantee.
+Ground truth is used ONLY for scoring, never fed into the extraction step.
 
-Chạy: DEEPSEEK_API_KEY=... python -m src.experiments.conformal_llm_eval
+Run: DEEPSEEK_API_KEY=... python -m src.experiments.conformal_llm_eval
 """
 from __future__ import annotations
 
@@ -35,7 +37,7 @@ def build_ontology(seed: int, n: int = 16):
     edges = set()
     for j in range(1, n):
         for _ in range(rng.randint(1, 2)):
-            edges.add((words[j], words[rng.randint(0, j - 1)]))  # con → cha (DAG)
+            edges.add((words[j], words[rng.randint(0, j - 1)]))  # child → parent (DAG)
     adj: dict = {}
     for a, b in edges:
         adj.setdefault(a, set()).add(b)
@@ -57,7 +59,7 @@ def build_ontology(seed: int, n: int = 16):
 
 
 def render(edges, words, rng, hard: bool = False) -> str:
-    """Render đồ thị thành văn bản tự nhiên. hard=True ⟹ khó trích (gây nhiễu THẬT)."""
+    """Render the graph as natural-language text. hard=True ⟹ harder to extract (introduces REAL noise)."""
     if not hard:
         templates = [
             "Every {a} is a {b}.",
@@ -75,14 +77,14 @@ def render(edges, words, rng, hard: bool = False) -> str:
         rng.shuffle(lines)
         return " ".join(lines)
 
-    # HARD: mệnh đề lồng, đại từ, và câu GẦN-GIỐNG is-a (dễ bị trích nhầm)
+    # HARD: nested clauses, pronouns, and NEAR-MISS is-a sentences (prone to extraction errors)
     hard_t = [
         "The {a}, which naturalists group under the broader {b}, thrives in wetlands.",
         "Though it looks unusual, each {a} ultimately counts as one more {b}.",
         "Field guides note that a {a} — like others of its {b} lineage — molts yearly.",
     ]
     lines = [rng.choice(hard_t).format(a=a, b=b) for a, b in edges]
-    for _ in range(max(2, len(edges) // 2)):  # NHIỀU câu gần-giống → gây FP
+    for _ in range(max(2, len(edges) // 2)):  # MANY near-miss sentences → induce false positives
         a, b = rng.choice(words), rng.choice(words)
         lines.append(rng.choice([
             f"A {a} closely resembles a {b} but is unrelated.",
@@ -130,11 +132,11 @@ def run(n_onto: int = 15, alpha: float = 0.1, model: str = "deepseek-chat",
         words, gold_edges, reach = build_ontology(seed=1000 + k)
         text = render(gold_edges, words, rng, hard=hard)
         llm_edges = extract_edges(client, text, words)
-        # nhiễu trích (chấm bằng gold)
+        # extraction noise (scored against gold)
         ex_tp += len(llm_edges & gold_edges)
         ex_fp += len(llm_edges - gold_edges)
         ex_fn += len(gold_edges - llm_edges)
-        # đồ thị LLM-trích → conf
+        # LLM-extracted graph → confidence
         eng = FuzzyInferenceEngine(walk_len=12, alpha=0.7)
         for a, b in llm_edges:
             eng.add_relation(a, b)
@@ -150,7 +152,7 @@ def run(n_onto: int = 15, alpha: float = 0.1, model: str = "deepseek-chat",
                 else:
                     neg_scores.append(s)
 
-    # conformal: chia calibration/test trên POSITIVE (reachable) pairs
+    # conformal: split calibration/test over POSITIVE (reachable) pairs
     rng.shuffle(pos_scores)
     h = len(pos_scores) // 2
     cal, test = pos_scores[:h], pos_scores[h:]
@@ -174,10 +176,10 @@ def run(n_onto: int = 15, alpha: float = 0.1, model: str = "deepseek-chat",
         print(json.dumps(res, indent=2))
         ok = coverage >= (1 - alpha) - 0.03
         print(
-            f"\nLLM TRÍCH đồ thị (nhiễu THẬT): precision={ex_prec:.0%} recall={ex_rec:.0%}.\n"
-            f"Conformal trên đồ thị BẨN đó: phủ={coverage:.1%} (mục tiêu ≥{1-alpha:.0%}) "
-            f"{'✔ bảo đảm giữ' if ok else '✘'} | hiệu quả FPR={fpr:.0%}.\n"
-            f"⟹ Bảo đảm phủ phân-phối-tự-do NGAY CẢ khi đồ thị do LLM trích còn lỗi."
+            f"\nLLM-EXTRACTED graph (REAL noise): precision={ex_prec:.0%} recall={ex_rec:.0%}.\n"
+            f"Conformal prediction on that NOISY graph: coverage={coverage:.1%} (target ≥{1-alpha:.0%}) "
+            f"{'✔ guarantee holds' if ok else '✘'} | FPR efficiency={fpr:.0%}.\n"
+            f"⟹ Distribution-free coverage guarantee holds EVEN WHEN the LLM-extracted graph is imperfect."
         )
     return res
 

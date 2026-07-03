@@ -1,18 +1,21 @@
 """
-Đánh giá trên benchmark CÔNG KHAI CLUTRR (Sinha et al., EMNLP 2019) — suy luận quan
-hệ họ hàng bằng HỢP THÀNH, khớp trực tiếp đại số toán tử của ta (Định lý G).
+Evaluation on the PUBLIC CLUTRR benchmark (Sinha et al., EMNLP 2019) — kinship
+relation inference by COMPOSITION, directly matching our operator algebra (Theorem G).
 
-Giao thức TRUNG THỰC (số liệu so sánh được, không tự chế thế giới):
-  • Solver grounded (0 token): học BẢNG HỢP THÀNH nhị phân từ proof_state của TRAIN
-    (KHÔNG dùng nhãn test), rồi FOLD chuỗi quan hệ dọc đường đi (hợp thành toán tử,
-    rút gọn CYK bất kỳ vị trí — hợp lệ do kết hợp được).
-  • LLM (DeepSeek): đọc story tự nhiên, trả quan hệ — đo accuracy theo SỐ BƯỚC.
-  • So sánh accuracy vs hop: minh hoạ grounded composition bền theo độ sâu, LLM tụt.
+HONEST protocol (comparable numbers, no fabricated world):
+  • Grounded solver (0 tokens): learns a binary COMPOSITION TABLE from TRAIN's
+    proof_state (NEVER using test labels), then FOLDS the relation chain along
+    the path (operator composition, CYK reduction at any position — valid since
+    composition is associative).
+  • LLM (DeepSeek): reads the natural-language story, returns a relation — accuracy
+    is measured PER HOP COUNT.
+  • Accuracy-vs-hop comparison: illustrates grounded composition staying robust with
+    depth while the LLM degrades.
 
-Bảng hợp thành = tri thức NGOÀI (luật họ hàng) ⟹ đây là GUARD (Định lý G), không
-phải SGDC tự-grounded. Ghi rõ để không lẫn.
+The composition table = EXTERNAL knowledge (kinship rules) ⟹ this is a GUARD
+(Theorem G), NOT self-grounded SGDC. Noted explicitly to avoid confusion.
 
-Chạy: DEEPSEEK_API_KEY=... python -m src.experiments.clutrr_eval
+Run: DEEPSEEK_API_KEY=... python -m src.experiments.clutrr_eval
 """
 from __future__ import annotations
 
@@ -50,14 +53,14 @@ def fetch_rows(split: str, offset: int, length: int, retries: int = 5):
     for a in range(retries):
         try:
             return [r["row"] for r in json.load(op.open(url, timeout=90))["rows"]]
-        except Exception:  # 502/timeout thoáng qua → backoff
+        except Exception:  # transient 502/timeout → backoff
             if a == retries - 1:
                 raise
             time.sleep(2 ** a)
 
 
 def load_split(split: str, n: int) -> list[dict]:
-    """Tải & cache về JSONL cục bộ (tránh gọi lại API)."""
+    """Download & cache to local JSONL (avoids repeated API calls)."""
     os.makedirs(_CACHE, exist_ok=True)
     path = os.path.join(_CACHE, f"{split}_{n}.jsonl")
     if os.path.exists(path):
@@ -86,7 +89,7 @@ def _gender_map(s: str) -> dict[str, str]:
 
 
 def harvest_table(train_rows: list[dict]) -> dict:
-    """Bảng hợp thành (r1, r2, gender_C) → r từ proof_state TRAIN (không nhãn test)."""
+    """Composition table (r1, r2, gender_C) → r from TRAIN's proof_state (no test labels)."""
     table: dict[tuple, str] = {}
     for r in train_rows:
         g = _gender_map(r["genders"])
@@ -103,7 +106,7 @@ def harvest_table(train_rows: list[dict]) -> dict:
 
 
 def _reduce_spans(spans, gorder, table):
-    """Rút gọn CYK tại chỗ (bất kỳ vị trí — hợp lệ vì hợp thành kết hợp được)."""
+    """In-place CYK reduction (at any position — valid since composition is associative)."""
     changed = True
     while changed and len(spans) > 1:
         changed = False
@@ -119,12 +122,13 @@ def _reduce_spans(spans, gorder, table):
 
 def learn_table_closure(train_rows: list[dict]) -> dict:
     """
-    Học BẢNG HỢP THÀNH ĐẦY ĐỦ bằng closure (fixpoint) từ nhãn GOLD của TRAIN:
-      • hop-2 cho luật cơ sở comp(r0,r1,g)=target;
-      • lan truyền: chuỗi dài rút gọn bằng luật đã biết tới còn 2 span ⟹ suy luật
-        còn thiếu từ gold. Lặp tới bất động.
-    Composition đóng trên tập quan hệ hữu hạn ⟹ bảng phủ mọi độ dài fold.
-    (Chỉ dùng nhãn TRAIN — hợp lệ; test giữ nguyên để đánh giá.)
+    Learns the FULL COMPOSITION TABLE via closure (fixpoint) from TRAIN's GOLD labels:
+      • hop-2 gives base rules comp(r0,r1,g)=target;
+      • propagation: a longer chain reduced by known rules down to 2 spans ⟹ infer
+        the missing rule from gold. Iterate to a fixed point.
+    Composition is closed over the finite relation set ⟹ the table covers folds of
+    any length.
+    (Uses TRAIN labels only — valid; test is untouched for evaluation.)
     """
     chains = []
     for r in train_rows:
@@ -153,11 +157,12 @@ def _lit(x):
 
 def path_relations(row) -> list[tuple[str, int]] | None:
     """
-    Đường đi ngắn nhất query_start→query_end: list (quan hệ, node đích).
+    Shortest path query_start→query_end: list of (relation, target node).
 
-    Kiểm tra `v==dst` TRƯỚC khi gate theo `visited` (không seed src vào `prev`) để
-    vẫn phát hiện được đường quay lại CHÍNH src (query_edge=(x,x) qua chu trình) —
-    cùng lớp bug đã sửa ở GroundedReasoner._path_via / FuzzyInferenceEngine.explain.
+    Checks `v==dst` BEFORE gating on `visited` (does not seed src into `prev`) so
+    that a path looping back to src ITSELF (query_edge=(x,x) via a cycle) can still
+    be detected — the same bug class fixed in GroundedReasoner._path_via /
+    FuzzyInferenceEngine.explain.
     """
     se, et = _lit(row["story_edges"]), _lit(row["edge_types"])
     src, dst = _lit(row["query_edge"])
@@ -176,7 +181,7 @@ def path_relations(row) -> list[tuple[str, int]] | None:
                     while chain[-1][0] in prev:
                         p_u, p_rel = prev[chain[-1][0]]
                         chain.append((p_u, p_rel))
-                    # chain hiện: [(u,rel_to_dst), (u_prev, rel_to_u), ...] từ gần->xa
+                    # chain now: [(u,rel_to_dst), (u_prev, rel_to_u), ...] from near->far
                     chain.reverse()
                     return [(r, chain[i + 1][0] if i + 1 < len(chain) else dst)
                             for i, (_n, r) in enumerate(chain)]
@@ -189,7 +194,7 @@ def path_relations(row) -> list[tuple[str, int]] | None:
 
 
 def solve(rels: list[tuple[str, int]], gorder: list[str], table: dict) -> str | None:
-    """Fold hợp thành (rút gọn CYK bất kỳ vị trí — hợp lệ vì kết hợp được)."""
+    """Compositional fold (CYK reduction at any position — valid since associative)."""
     spans = [[rl, node] for rl, node in rels]
     while len(spans) > 1:
         reduced = False
@@ -209,7 +214,7 @@ def solve(rels: list[tuple[str, int]], gorder: list[str], table: dict) -> str | 
 
 
 def clean_chain(row) -> list[tuple[str, int]] | None:
-    """Chỉ giữ story là CHUỖI đơn 0→1→…→k, query (0,k) — đường đi không nhập nhằng."""
+    """Keep only stories that are a single CHAIN 0→1→…→k, query (0,k) — unambiguous path."""
     se, qe = _lit(row["story_edges"]), _lit(row["query_edge"])
     k = len(se)
     if qe != (0, k) or se != [(i, i + 1) for i in range(k)]:
@@ -220,7 +225,7 @@ def clean_chain(row) -> list[tuple[str, int]] | None:
 
 def run(train_n: int = 5000, per_hop: int = 10, hops=range(2, 9),
         model: str = "deepseek-chat", seed: int = 0, verbose: bool = True) -> dict:
-    """So DeepSeek vs solver grounded (0-token) theo SỐ BƯỚC trên clean-chain test."""
+    """Compares DeepSeek vs the grounded (0-token) solver PER HOP COUNT on the clean-chain test set."""
     import collections
     import random
     import re
@@ -228,7 +233,7 @@ def run(train_n: int = 5000, per_hop: int = 10, hops=range(2, 9),
     from src.reasoning.llm_client import DeepSeekClient
 
     train = load_split("train", train_n)
-    table = learn_table_closure(train)  # closure ⟹ phủ 100% mọi hop
+    table = learn_table_closure(train)  # closure ⟹ 100% coverage at every hop
     test = load_split("test", 1048)
     labels = sorted({r["target_text"] for r in test})
 

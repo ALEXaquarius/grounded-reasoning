@@ -1,18 +1,18 @@
 """
-Thực nghiệm CHẶN ẢO GIÁC trên LLM THẬT (DeepSeek) bằng máy suy diễn grounded.
+HALLUCINATION-BLOCKING experiment on a REAL LLM (DeepSeek) using the grounded inference engine.
 
-Giao thức:
-  1. Sinh một cây quan hệ (kinship) và chỉ đưa LLM các FACT 1-BƯỚC (parent).
-  2. Hỏi LLM các câu suy diễn NHIỀU BƯỚC (grandparent, great-grandparent,
-     ancestor, sibling-qua-loại-suy) — gồm cả câu BẪY có đáp án RỖNG.
-  3. LLM trả lời (JSON). Ta có GROUND TRUTH từ OperatorRelationAlgebra (Định lý G).
-  4. HallucinationGuard chấp nhận một tên do LLM nêu ⟺ tồn tại đường đi grounded.
+Protocol:
+  1. Generate a relation tree (kinship) and give the LLM only the 1-HOP FACTS (parent).
+  2. Ask the LLM MULTI-HOP inference questions (grandparent, great-grandparent,
+     ancestor, sibling-by-analogy) — including TRAP questions whose correct answer is EMPTY.
+  3. The LLM answers (JSON). We have GROUND TRUTH from OperatorRelationAlgebra (Theorem G).
+  4. HallucinationGuard accepts a name proposed by the LLM iff a grounded path exists.
 
-Đo: (i) LLM tự nó ảo giác bao nhiêu; (ii) guard bắt được bao nhiêu ảo giác trong
-khi KHÔNG loại nhầm đáp án đúng (precision phải = 1.0 theo Định lý G).
+Measures: (i) how much the LLM hallucinates on its own; (ii) how many hallucinations
+the guard catches while NOT dropping any correct answer (precision must = 1.0 by Theorem G).
 
-Chạy: DEEPSEEK_API_KEY=... python -m src.experiments.guard_llm_eval
-(đọc key từ .env/biến môi trường; không hardcode).
+Run: DEEPSEEK_API_KEY=... python -m src.experiments.guard_llm_eval
+(reads the key from .env/environment variable; never hardcode it).
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from src.reasoning.operator_algebra import OperatorRelationAlgebra
 
 
 def build_family(seed: int = 0):
-    """Cây kinship nhiều tầng. Trả về (facts[(child,parent)], alg, names)."""
+    """Multi-generation kinship tree. Returns (facts[(child,parent)], alg, names)."""
     rng = random.Random(seed)
     names = [
         "Al", "Bo", "Cy", "Di", "Ed", "Fi", "Gu", "Ha",
@@ -33,7 +33,7 @@ def build_family(seed: int = 0):
     rng.shuffle(names)
     alg = OperatorRelationAlgebra()
     facts: list[tuple[str, str]] = []
-    # gán mỗi người (trừ 4 gốc) một parent trong nhóm "lớn tuổi hơn" → cây có tầng
+    # assign each person (except the 4 roots) a parent from the "older" group → a tiered tree
     for i, child in enumerate(names):
         if i >= 4:
             parent = names[rng.randint(0, i - 1)]
@@ -43,7 +43,7 @@ def build_family(seed: int = 0):
 
 
 def make_queries(alg: OperatorRelationAlgebra, names: list[str]):
-    """Câu hỏi suy diễn nhiều bước + đáp án đúng (grounded)."""
+    """Multi-hop inference questions + correct (grounded) answers."""
     q = []
     for person in names:
         q.append(("grandparent", person, alg.follow(person, ["parent", "parent"])))
@@ -91,9 +91,9 @@ def run(seed: int = 0, model: str = "deepseek-chat", verbose: bool = True):
     queries = make_queries(alg, names)
     client = DeepSeekClient(model=model)
 
-    # LLM tự đánh giá (không guard)
+    # LLM self-assessment (no guard)
     llm_tp = llm_fp = llm_fn = 0
-    # sau khi guard lọc
+    # after guard filtering
     g_tp = g_fp = g_fn = 0
     guard_dropped_true = 0
 
@@ -102,12 +102,12 @@ def run(seed: int = 0, model: str = "deepseek-chat", verbose: bool = True):
         raw = client.ask(prompt, temperature=0.0)
         claimed = parse_names(raw, universe)
 
-        # LLM thô
+        # raw LLM
         llm_tp += len(claimed & truth)
-        llm_fp += len(claimed - truth)          # ẢO GIÁC: nêu tên không đúng
+        llm_fp += len(claimed - truth)          # HALLUCINATION: proposed an incorrect name
         llm_fn += len(truth - claimed)
 
-        # guard: giữ lại tên do LLM nêu CHỈ KHI có đường đi grounded phù hợp kind
+        # guard: keep a name proposed by the LLM ONLY IF a grounded path matching kind exists
         kept = {c for c in claimed if _grounded(alg, kind, person, c)}
         g_tp += len(kept & truth)
         g_fp += len(kept - truth)
@@ -130,9 +130,9 @@ def run(seed: int = 0, model: str = "deepseek-chat", verbose: bool = True):
     if verbose:
         print(json.dumps(res, indent=2))
         print(
-            f"\nLLM thô: precision={lp:.2%}  (ảo giác {llm_fp} tên bịa)\n"
-            f"Sau GUARD: precision={gp:.2%}  (bắt {llm_fp - g_fp}/{llm_fp} ảo giác, "
-            f"lọt {g_fp}, loại nhầm đúng {guard_dropped_true})"
+            f"\nRaw LLM: precision={lp:.2%}  ({llm_fp} hallucinated names)\n"
+            f"After GUARD: precision={gp:.2%}  (caught {llm_fp - g_fp}/{llm_fp} hallucinations, "
+            f"{g_fp} leaked through, {guard_dropped_true} correct answers wrongly dropped)"
         )
     return res
 

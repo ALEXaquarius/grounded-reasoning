@@ -94,7 +94,7 @@ language with zero configuration — `("Anh","cha","Bảo")`, `("父","是","祖
 ## 3. MCP server (for Claude / any MCP-compatible agent)
 
 ```bash
-pip install "grounded-reasoning[mcp]"
+pip install -e ".[mcp]"                   # from a clone of this repo (not yet on PyPI)
 python -m src.agent.mcp_server            # stdio MCP server
 ```
 

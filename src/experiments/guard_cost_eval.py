@@ -1,16 +1,16 @@
 """
-CHI PHÍ TOKEN của việc dùng guard — đo thật, không suy đoán.
+TOKEN COST of using the guard — measured, not guessed.
 
-Hai cách sửa ảo giác của LLM, so trên CÙNG một đầu ra suy diễn:
+Two ways to fix LLM hallucinations, compared on the SAME inference output:
 
-  A. GUARD (của ta): kiểm chứng cục bộ bằng đại số toán tử (Định lý G+H). Chi phí
-     token LLM = 0 (chỉ nhân ma trận O(n²·K) trên CPU). Precision → 100% (đảm bảo).
-  B. LLM SELF-VERIFY: gọi LLM LẦN 2 để nó tự lọc lại claim. Tốn THÊM token, và
-     KHÔNG có bảo đảm (vẫn có thể ảo giác tiếp).
+  A. GUARD (ours): local verification via operator algebra (Theorem G+H). LLM
+     token cost = 0 (just an O(n²·K) matrix multiplication on CPU). Precision → 100% (guaranteed).
+  B. LLM SELF-VERIFY: call the LLM a SECOND time to have it re-filter its own claims.
+     Costs EXTRA tokens, and comes with NO guarantee (it can still hallucinate).
 
-Câu hỏi: dùng guard có làm TĂNG chi phí token không? Đo total_tokens ở cả hai.
+Question: does using the guard INCREASE token cost? Measure total_tokens for both.
 
-Chạy: DEEPSEEK_API_KEY=... python -m src.experiments.guard_cost_eval
+Run: DEEPSEEK_API_KEY=... python -m src.experiments.guard_cost_eval
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ def run(seed: int = 3, top_k: int = 6, model: str = "deepseek-chat", verbose: bo
         {a for a, _ in edges}, key=lambda x: -len(alg.closure(x, "relates to"))
     )[:top_k]
 
-    reason_client = DeepSeekClient(model=model)   # bước suy diễn (chung cả A và B)
-    verify_client = DeepSeekClient(model=model)   # riêng cho self-verify (đo token B)
+    reason_client = DeepSeekClient(model=model)   # inference step (shared by A and B)
+    verify_client = DeepSeekClient(model=model)   # dedicated to self-verify (measures B's tokens)
 
     guard_tp = guard_fp = 0
     verify_tp = verify_fp = 0
@@ -47,14 +47,14 @@ def run(seed: int = 3, top_k: int = 6, model: str = "deepseek-chat", verbose: bo
         )
         claimed = parse(reason_client.ask(prompt, temperature=0.0), universe)
 
-        # --- A. GUARD cục bộ: 0 token, chỉ đại số ---
+        # --- A. Local GUARD: 0 tokens, algebra only ---
         t0 = time.perf_counter()
         kept = {c for c in claimed if c in alg.closure(x, "relates to")}
         guard_seconds += time.perf_counter() - t0
         guard_tp += len(kept & truth)
         guard_fp += len(kept - truth)
 
-        # --- B. LLM SELF-VERIFY: gọi LLM lần 2 để tự lọc (tốn thêm token) ---
+        # --- B. LLM SELF-VERIFY: call the LLM a second time to self-filter (costs extra tokens) ---
         vprompt = (
             f"Facts (the ONLY truth):\n{factstr}\n\n"
             f'Someone claims these are all Z with "{x} relates to Z": '
@@ -71,11 +71,11 @@ def run(seed: int = 3, top_k: int = 6, model: str = "deepseek-chat", verbose: bo
 
     res = {
         "n_queries": len(srcs),
-        "reasoning_tokens": reason_client.total_tokens,   # chung cho cả A và B
-        "guard_extra_tokens": 0,                          # guard KHÔNG gọi LLM
+        "reasoning_tokens": reason_client.total_tokens,   # shared by A and B
+        "guard_extra_tokens": 0,                          # the guard does NOT call the LLM
         "guard_cpu_ms": round(1000 * guard_seconds, 3),
         "guard_precision": prec(guard_tp, guard_fp),
-        "self_verify_extra_tokens": verify_client.total_tokens,  # phần TĂNG thêm của B
+        "self_verify_extra_tokens": verify_client.total_tokens,  # extra cost incurred by B
         "self_verify_precision": prec(verify_tp, verify_fp),
     }
     if verbose:
@@ -83,13 +83,13 @@ def run(seed: int = 3, top_k: int = 6, model: str = "deepseek-chat", verbose: bo
         base = res["reasoning_tokens"]
         sv = res["self_verify_extra_tokens"]
         print(
-            f"\nSuy diễn (chung): {base} token.\n"
-            f"A. GUARD: +0 token LLM, +{res['guard_cpu_ms']} ms CPU, "
-            f"precision={res['guard_precision']:.0%} (đảm bảo).\n"
-            f"B. LLM self-verify: +{sv} token "
-            f"(+{100 * sv / max(base, 1):.0f}% so với suy diễn), "
-            f"precision={res['self_verify_precision']:.0%} (không đảm bảo).\n"
-            f"⟹ Dùng guard KHÔNG tăng chi phí token; tự-kiểm-bằng-LLM thì có."
+            f"\nInference (shared): {base} tokens.\n"
+            f"A. GUARD: +0 LLM tokens, +{res['guard_cpu_ms']} ms CPU, "
+            f"precision={res['guard_precision']:.0%} (guaranteed).\n"
+            f"B. LLM self-verify: +{sv} tokens "
+            f"(+{100 * sv / max(base, 1):.0f}% over inference), "
+            f"precision={res['self_verify_precision']:.0%} (not guaranteed).\n"
+            f"⟹ Using the guard does NOT increase token cost; self-verification via LLM does."
         )
     return res
 

@@ -51,18 +51,30 @@ covers 99.5%, accuracy 99.2%. `src/experiments/clutrr_eval.py`.)*
 
 ## What it is / is NOT (honestly)
 
-**IS:** a **guaranteed** reasoning-verification layer built on relation operator algebra.
-- ✅ **Precision = 1.0 guaranteed** (Theorem G): only accepts a claim if a grounded proof path exists.
-- ✅ **Zero extra tokens**: local matrix multiplication, no LLM call. Compare to
-  "LLM self-verify," which costs +110% tokens for only 34% precision.
-- ✅ **Two-sided guarantee** (Theorem I): both precision *and* recall have tight bounds.
-- ✅ **No external KB needed** (SGDC): uses the LLM's own internal consistency.
+**Is:** a guaranteed reasoning-verification layer built on relation operator algebra.
+- **Precision = 1.0, guaranteed** (Theorem G) — accepts a claim only if a grounded proof path exists.
+- **Zero extra tokens** — local matrix multiplication, no LLM call. Compare to
+  "have the LLM self-verify," which costs +110% tokens for 34% precision.
+- **Two-sided guarantee** (Theorem I) — precision *and* recall both have tight bounds.
+- **No external KB required** (SGDC) — uses the LLM's own internal consistency.
 
-**IS NOT:** an "unprecedented breakthrough." The Katz index, Neumann series,
-reachability, and neuro-symbolic grounding are all **classical math/techniques**. The
-contribution is **unification + a measured guarantee + benchmark numbers**, not a new
-primitive. The guard **needs a relation graph** (supplied, or extracted from LLM facts)
-— flexibility is bounded (see [PAPER §5](PAPER.md)).
+**Is not:** an "unprecedented breakthrough." The Katz index, the Neumann series,
+graph reachability, and neuro-symbolic grounding are all classical math and
+technique. The contribution here is unification, a measured guarantee, and
+benchmark numbers — not a new primitive. The guard needs a relation graph
+(supplied, or extracted from LLM facts); flexibility is bounded (see
+[PAPER §5](PAPER.md)).
+
+### How this differs from the usual fixes
+
+| Approach | Extra tokens | Guarantee | Needs an external KB |
+|---|---|---|---|
+| LLM self-verification (2nd call) | +110% | none (measured 34% precision) | no |
+| Self-consistency / majority vote | multiplies with sample count | none, statistical only | no |
+| RAG / external KG grounding | varies | only as good as retrieval | yes |
+| **This guard** | **+0** | **precision = 1.0** (Theorem G) | no |
+| **This guard, self-grounded (SGDC)** | **+0** | precision = 1.0 given sound atomic facts (Theorem I) | no |
+| **This guard, conformal** | **+0** | coverage ≥ 1−α, distribution-free (Theorem K) | no |
 
 ---
 
@@ -99,7 +111,7 @@ seven are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
 
 ---
 
-## Highlight: guaranteed reasoning over a graph an LLM extracted from raw text
+## Guaranteed reasoning over a graph an LLM extracted from raw text
 
 The guard/solver needs a **clean** graph. But if you let an **LLM extract** relations
 from natural-language text, the graph is **noisy** (missing/spurious edges).
@@ -110,10 +122,10 @@ graph.
 End-to-end demo: **DeepSeek extracts an "is a" graph from text** → conformal runs on
 that extracted graph (ground truth is used only for scoring):
 
-| Text | LLM extraction (P / R) | Coverage (target **≥90%**) | Efficiency (FPR) |
+| Text | LLM extraction (P / R) | Coverage (target ≥90%) | Efficiency (FPR) |
 |------|------------------------:|----------------------------:|------------------:|
-| Easy | 100% / 99.7% | **91.3%** ✅ | 0.0 |
-| Hard (nested clauses + near-miss distractors) | 99.5% / **68.5%** | **93.0%** ✅ | 0.77 |
+| Easy | 100% / 99.7% | **91.3%** | 0.0 |
+| Hard (nested clauses + near-miss distractors) | 99.5% / **68.5%** | **93.0%** | 0.77 |
 
 > The LLM's extraction **drops 31% of the edges** (a genuinely noisy graph) →
 > **the coverage guarantee still holds** (93% ≥ 90%), only efficiency degrades.
@@ -127,7 +139,8 @@ guard can't reach. `src/experiments/conformal_llm_eval.py`.
 ## Quickstart
 
 ```bash
-pip install -e ".[dev]"             # or: pip install grounded-reasoning
+git clone https://github.com/ALEXaquarius/grounded-reasoning
+cd grounded-reasoning && pip install -e ".[dev]"     # not yet on PyPI — install from source
 pytest tests/                       # every theorem + offline-locked logic, no network needed
 
 # Use it right now (no LLM/network needed):

@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] — Initial public release
+## 0.1.0 — Initial public release
 
 The first public release of `grounded-reasoning`: a relation-algebra verifier for
 LLM/agent multi-hop reasoning, extracted from a broader private research project into
@@ -40,5 +40,3 @@ a standalone, focused package.
 - Every module under `src/reasoning/`, `src/agent/`, and `src/theory/` is held to
   strict lint rules as the "published library" surface; `src/experiments/` holds
   research/reproduction scripts with a looser style (see `pyproject.toml`).
-
-[0.1.0]: https://github.com/ALEXaquarius/grounded-reasoning/releases/tag/v0.1.0
