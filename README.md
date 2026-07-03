@@ -238,4 +238,4 @@ part of this package. See [PAPER.md §1](PAPER.md) for the full framing.
 *Principle: proof before code, formal definitions, falsifiability, and honest
 reporting of negative results — see [CONTRIBUTING.md](CONTRIBUTING.md).*
 
-<!-- mcp-name: io.github.alexaquarius/grounded-reasoning -->
+<!-- mcp-name: io.github.ALEXaquarius/grounded-reasoning -->

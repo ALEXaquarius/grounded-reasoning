@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format is based on
 
 No code changes. Adds `server.json` and the `mcp-name` ownership marker in the
 README so the MCP server can be listed on the official MCP Registry
-(`io.github.alexaquarius/grounded-reasoning`), and updates install docs for the
+(`io.github.ALEXaquarius/grounded-reasoning`), and updates install docs for the
 PyPI release.
 
 ## 0.1.0 — Initial public release

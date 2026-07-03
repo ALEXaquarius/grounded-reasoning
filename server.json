@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.alexaquarius/grounded-reasoning",
+  "name": "io.github.ALEXaquarius/grounded-reasoning",
   "title": "Grounded Reasoning",
   "description": "Verify multi-hop relational claims before an agent asserts them — zero tokens, with proof paths.",
   "repository": {
