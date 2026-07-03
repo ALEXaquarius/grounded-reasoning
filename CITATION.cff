@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "grounded-reasoning: zero-token, precision-guaranteed verification of LLM multi-hop relational reasoning"
+abstract: >-
+  A relation-algebra verifier for LLMs and agents. It checks a multi-hop
+  relational claim before assertion with zero model tokens and a precision
+  guarantee (accepts a claim iff a grounded proof path exists), plus a
+  conformal mode giving distribution-free coverage under noisy graphs.
+  Validated on real LLMs and the public CLUTRR benchmark; seven numerically
+  verified theorems.
+type: software
+version: "0.1.0"
+license: MIT
+repository-code: "https://github.com/ALEXaquarius/grounded-reasoning"
+keywords:
+  - large-language-models
+  - agents
+  - hallucination
+  - neuro-symbolic
+  - conformal-prediction
+  - knowledge-graph
+authors:
+  - family-names: "Wang"
+    given-names: "S"

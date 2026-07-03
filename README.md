@@ -1,0 +1,220 @@
+# grounded-reasoning — Grounded, Guaranteed Reasoning for LLMs & Agents
+
+[![CI](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml/badge.svg)](https://github.com/ALEXaquarius/grounded-reasoning/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+
+> **TL;DR.** LLMs hallucinate on multi-hop relational reasoning. This is a
+> **relation-algebra verifier** an agent calls to check a claim *before* asserting it:
+> **zero model tokens**, **precision-guaranteed** (accepts a claim iff a grounded proof
+> path exists), language-agnostic, and provider-agnostic. Plugs in as a **library**, a
+> **function-calling tool**, or an **MCP server**. Validated on **real LLMs** (DeepSeek
+> et al.) and the public **CLUTRR** benchmark. See [docs/integration.md](docs/integration.md).
+
+📄 Full paper: **[PAPER.md](PAPER.md)** · Integration guide: **[docs/integration.md](docs/integration.md)**
+
+Đọc bằng tiếng Việt: **[README.vi.md](README.vi.md)**
+
+---
+
+## Why this exists
+
+LLMs are solid on one-hop facts but **collapse on composition** — chaining several
+correct facts into a multi-step conclusion. On CLUTRR (kinship reasoning), DeepSeek's
+accuracy **falls off with depth**, while a grounded operator-composition solver holds
+**~100% flat — at zero tokens**:
+
+```
+acc
+100% ●─────●─────●─────●─────●─────●─────●   ● Grounded solver (algebra, 0 tokens)
+ 90% |
+ 80% ○
+ 70% |  ╲
+ 60% |   ╲
+ 50% |    ╲
+ 40% |     ○           ○                     ○ DeepSeek (LLM)
+ 30% |      ╲         ╱ ╲
+ 20% |       ○─────○     ╲
+ 10% |                    ○─────○
+  0% +──┴─────┴─────┴─────┴─────┴─────┴─────┴─
+      hop 2    3     4     5     6     7     8   (composition steps)
+
+     hop:      2     3     4     5     6     7     8
+     DeepSeek: 83%   42%   25%   25%   42%   17%   8%
+     Solver:   100%  100%  100%  100%  100%  100%  100%
+```
+
+*(CLUTRR/v1 gen_train234_test2to10, clean-chain, n=12/hop; full test set n=635: solver
+covers 99.5%, accuracy 99.2%. `src/experiments/clutrr_eval.py`.)*
+
+---
+
+## What it is / is NOT (honestly)
+
+**IS:** a **guaranteed** reasoning-verification layer built on relation operator algebra.
+- ✅ **Precision = 1.0 guaranteed** (Theorem G): only accepts a claim if a grounded proof path exists.
+- ✅ **Zero extra tokens**: local matrix multiplication, no LLM call. Compare to
+  "LLM self-verify," which costs +110% tokens for only 34% precision.
+- ✅ **Two-sided guarantee** (Theorem I): both precision *and* recall have tight bounds.
+- ✅ **No external KB needed** (SGDC): uses the LLM's own internal consistency.
+
+**IS NOT:** an "unprecedented breakthrough." The Katz index, Neumann series,
+reachability, and neuro-symbolic grounding are all **classical math/techniques**. The
+contribution is **unification + a measured guarantee + benchmark numbers**, not a new
+primitive. The guard **needs a relation graph** (supplied, or extracted from LLM facts)
+— flexibility is bounded (see [PAPER §5](PAPER.md)).
+
+---
+
+## Three theorems, one operator (F = G = H)
+
+The reasoning core rests on a single unification (numerically verified, zero error):
+
+| View | Theorem | Content |
+|------|---------|---------|
+| Fuzzy diffusion inference | **F** | conf(a→b) = Σ αᵏ(Pᵏ)[a,b], calibrated + grounded |
+| Relation operator algebra | **G** | composition = operator product, transitive closure = Σ powers |
+| Spectral analysis (Katz) | **H** | `engine.infer` = resolvent (I−αP)⁻¹−I (matches **0.0** error) |
+
+⟹ fuzzy inference **is** spectral analysis of the relation operator. `src/reasoning/`.
+
+Four further theorems extend this core: **I** (two-sided precision/recall guarantee
+for a self-grounded, no-external-KB variant), **J** (closure-learning completeness,
+validated on CLUTRR), **K** (conformal reasoning — distribution-free coverage under a
+*noisy* relation graph, including one extracted by an LLM from raw text), and **L**
+(Horn forward-chaining, generalizing transitive closure to conjunctive rules). All
+seven are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
+
+---
+
+## Evidence on real LLMs (DeepSeek)
+
+| Experiment | Result |
+|------------|--------|
+| Hallucination guard (kinship) | precision **33% → 100%**, catches 94/94, 0 false rejects |
+| Guard token cost | **+0 tokens** (vs. LLM self-verify: +110% tokens, 34% precision) |
+| SGDC (self-grounded, no external KB) | precision **78% → 100%** from internal consistency alone |
+| CLUTRR (public benchmark) | solver **~100% at every hop** vs. DeepSeek 83%→8% |
+| Hard passage (9-step chain) | DeepSeek **fabricates 2/10** (wrong direction); grounded system **10/10**, with proofs — [`examples/hallucination_demo.py`](examples/hallucination_demo.py) |
+
+---
+
+## Highlight: guaranteed reasoning over a graph an LLM extracted from raw text
+
+The guard/solver needs a **clean** graph. But if you let an **LLM extract** relations
+from natural-language text, the graph is **noisy** (missing/spurious edges).
+**Conformal Reasoning** (Theorem K) fixes exactly that: use operator confidence as a
+score, calibrate a threshold ⟹ **distribution-free coverage ≥ 1−α**, even on a noisy
+graph.
+
+End-to-end demo: **DeepSeek extracts an "is a" graph from text** → conformal runs on
+that extracted graph (ground truth is used only for scoring):
+
+| Text | LLM extraction (P / R) | Coverage (target **≥90%**) | Efficiency (FPR) |
+|------|------------------------:|----------------------------:|------------------:|
+| Easy | 100% / 99.7% | **91.3%** ✅ | 0.0 |
+| Hard (nested clauses + near-miss distractors) | 99.5% / **68.5%** | **93.0%** ✅ | 0.77 |
+
+> The LLM's extraction **drops 31% of the edges** (a genuinely noisy graph) →
+> **the coverage guarantee still holds** (93% ≥ 90%), only efficiency degrades.
+> *Validity always holds; efficiency scales with graph quality.*
+
+⟹ A path to guaranteed reasoning over **natural-language relations** — where the hard
+guard can't reach. `src/experiments/conformal_llm_eval.py`.
+
+---
+
+## Quickstart
+
+```bash
+pip install -e ".[dev]"             # or: pip install grounded-reasoning
+pytest tests/                       # every theorem + offline-locked logic, no network needed
+
+# Use it right now (no LLM/network needed):
+python -c "from grounded_reasoning import GroundedReasoner as G; r=G(); r.add_facts([('a','p','b'),('b','p','c')]); print(r.verify('a','c',via='p'))"
+
+# Real-LLM experiments (need a key — read from an env var, NEVER hardcoded):
+export DEEPSEEK_API_KEY=sk-...        # bring your own; .env is gitignored
+python -m src.experiments.guard_llm_eval        # hallucination guard
+python -m src.experiments.self_grounded_eval    # SGDC
+python -m src.experiments.clutrr_eval           # public CLUTRR benchmark
+python -m src.experiments.conformal_llm_eval    # end-to-end conformal (LLM-extracted graph)
+```
+
+---
+
+## Integrating with an Agent / LLM (`src/agent/`)
+
+A **relation-reasoning verifier** for agents: check a multi-hop claim **before
+asserting it** — zero model tokens, precision guaranteed (accepts iff a grounded proof
+path exists).
+
+```python
+from grounded_reasoning import GroundedReasoner
+gr = GroundedReasoner()
+gr.add_facts([("alice","parent","bob"),("bob","parent","carol")])
+gr.verify("alice","carol", via="parent")   # Verdict(grounded=True, proof=['alice','bob','carol'])
+gr.verify("alice","zed",   via="parent")   # Verdict(grounded=False, proof=None)  ← hallucination blocked
+```
+
+Three integration paths (details: [docs/integration.md](docs/integration.md)):
+- **Library**: `GroundedReasoner.verify / filter_claims / contradictions`.
+- **Function-calling**: `TOOL_SPEC` (Anthropic) / `openai_tool_spec()` (OpenAI) + `run_tool` — a stateless `verify_relation` tool.
+- **MCP server**: `python -m src.agent.mcp_server` — plugs into Claude or any MCP-compatible agent.
+
+**Multi-provider** (not just DeepSeek): `LLMClient(provider=...)` for DeepSeek / OpenAI /
+Groq / OpenRouter / Together / Mistral / Ollama (local) — all OpenAI-compatible, switch
+providers without changing code. **Multilingual**: entities/relations are opaque
+Unicode strings ⟹ works with any language (`cha`, `父`, `والد`…) with zero configuration.
+
+A real function-calling demo (agent verifies itself, blocks hallucination):
+`python -m src.experiments.agent_demo`. When the graph is **noisy** (relations
+extracted by an LLM from text), use `ConformalReasoner` for a **coverage ≥1−α**
+guarantee instead of hard precision.
+
+---
+
+## Source map
+
+| Path | Content |
+|------|---------|
+| `grounded_reasoning/` | Public package — `GroundedReasoner`, `verify_relation`, `TOOL_SPEC`, `ConformalReasoner`, `LLMClient` |
+| `src/agent/{verifier,tool,mcp_server}.py` | Public API implementation — HallucinationGuard, function-calling tool, MCP server |
+| `src/reasoning/abstract_inference.py` | FuzzyInferenceEngine, TypedInferenceEngine, HallucinationGuard (Theorem F) |
+| `src/reasoning/operator_algebra.py` | Relation operator algebra (Theorem G) |
+| `src/reasoning/relation_spectrum.py` | Spectrum, nilpotency, Katz resolvent (Theorem H) |
+| `src/reasoning/conformal_reasoning.py` | Conformal — coverage guarantee under noise (Theorem K) |
+| `src/reasoning/composition_algebra.py` | Composition-table learning, validated on CLUTRR (Theorem J) |
+| `src/reasoning/horn.py` | Horn forward-chaining, least-model semantics (Theorem L) |
+| `src/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
+| `src/theory/theorems.py` | **Seven theorems (F–L)** with numerical verification |
+| `src/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `examples/hallucination_demo.py` | End-to-end function-calling demo |
+
+---
+
+## Origin story
+
+This project began as an attempt to invent an embedding-free retrieval algorithm that
+could compete with dense/RAG retrieval. That research question reached a rigorous,
+fully honest **negative** conclusion (ties BM25, loses significantly to dense
+embeddings — with a proof of why). The same mathematical toolkit — operator algebra,
+spectral analysis — turned out to have real, measurable value on a different problem:
+**guaranteeing** multi-hop relational reasoning. This repository ships only that
+validated, tested reasoning system; the full retrieval research trail (including every
+failed attempt, honestly recorded) lives in a separate research repository and is not
+part of this package. See [PAPER.md §1](PAPER.md) for the full framing.
+
+---
+
+## Contributing & Community
+
+- How to contribute + research principles: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · Security: [SECURITY.md](SECURITY.md)
+- Version history: [CHANGELOG.md](CHANGELOG.md) · Citation: [CITATION.cff](CITATION.cff)
+- License: **MIT** ([LICENSE](LICENSE))
+
+---
+
+*Principle: proof before code, formal definitions, falsifiability, and honest
+reporting of negative results — see [CONTRIBUTING.md](CONTRIBUTING.md).*
