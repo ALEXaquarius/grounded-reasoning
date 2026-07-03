@@ -1,5 +1,5 @@
 """
-Test API CÔNG KHAI `grounded_reasoning` — đảm bảo import sạch cho người dùng ngoài.
+Test for the `grounded_reasoning` PUBLIC API — ensures clean imports for external users.
 """
 import grounded_reasoning as grx
 

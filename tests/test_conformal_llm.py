@@ -1,6 +1,7 @@
 """
-Test OFFLINE cho demo Conformal-trên-LLM: mô phỏng NHIỄU TRÍCH (bỏ cạnh) thay LLM,
-khóa bất biến "phủ ≥ 1−α giữ NGAY CẢ khi đồ thị bẩn". Không gọi mạng.
+OFFLINE test for the Conformal-on-LLM demo: simulates EXTRACTION NOISE (dropped
+edges) in place of the LLM, locking down the invariant "coverage >= 1-alpha holds
+EVEN WHEN the graph is noisy". No network calls.
 """
 import random
 
@@ -16,7 +17,7 @@ def _coverage_under_drop(p_drop: float, alpha: float, seeds=range(12)) -> float:
         rng = random.Random(500 + k)
         eng = FuzzyInferenceEngine(walk_len=12, alpha=0.7)
         for a, b in gold:
-            if rng.random() > p_drop:      # mô phỏng LLM bỏ sót cạnh (nhiễu trích)
+            if rng.random() > p_drop:      # simulates the LLM dropping an edge (extraction noise)
                 eng.add_relation(a, b)
         infc = {x: eng.infer(x) for x in words}
         for x in words:
@@ -34,5 +35,5 @@ def test_conformal_coverage_holds_under_extraction_noise():
     alpha = 0.1
     for p_drop in (0.0, 0.2, 0.4):
         cov = _coverage_under_drop(p_drop, alpha)
-        # phủ ≥ 1−α (biên, dung sai nhỏ do rời rạc/hữu hạn) — GIỮ dù đồ thị bẩn
+        # coverage >= 1-alpha (with a small tolerance for finite-sample discreteness) — HOLDS even with a noisy graph
         assert cov >= (1 - alpha) - 0.05, f"p_drop={p_drop} cov={cov}"

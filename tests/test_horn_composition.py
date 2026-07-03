@@ -1,5 +1,5 @@
 """
-Tests cho suy diễn Horn (forward-chaining) + đại số hợp thành tổng quát.
+Tests for Horn inference (forward-chaining) + the generic composition algebra.
 """
 from src.reasoning.composition_algebra import fold, learn_composition
 from src.reasoning.horn import entails, explain, forward_chain
@@ -9,7 +9,7 @@ class TestHorn:
     def test_forward_chain_least_model(self):
         facts = {"a"}
         rules = [(frozenset({"a"}), "b"), (frozenset({"a", "b"}), "c"),
-                 (frozenset({"d"}), "e")]  # d không có → e không suy ra
+                 (frozenset({"d"}), "e")]  # d is absent → e is not derived
         M = forward_chain(facts, rules)
         assert M == {"a", "b", "c"}
 
@@ -20,7 +20,7 @@ class TestHorn:
         assert not entails(facts, rules, "z")
         proof = explain(facts, rules, "c")
         assert proof == [(frozenset({"a"}), "b"), (frozenset({"b"}), "c")]
-        assert explain(facts, rules, "z") is None      # không bịa chứng minh
+        assert explain(facts, rules, "z") is None      # never fabricates a proof
 
     def test_transitive_closure_is_one_rule_horn(self):
         nodes = ["x", "y", "z"]
@@ -28,12 +28,12 @@ class TestHorn:
         rules = [(frozenset({("e", a, b), ("e", b, c)}), ("e", a, c))
                  for a in nodes for b in nodes for c in nodes]
         M = forward_chain(facts, rules)
-        assert ("e", "x", "z") in M                     # bắc cầu suy ra
+        assert ("e", "x", "z") in M                     # derived transitively
 
 
 class TestCompositionAlgebra:
     def test_learn_and_fold_associative(self):
-        # monoid Z_4 cộng: comp(a,b)=(a+b)%4
+        # additive monoid Z_4: comp(a,b)=(a+b)%4
         def g(seq):
             acc = seq[0]
             for x in seq[1:]:
@@ -48,7 +48,7 @@ class TestCompositionAlgebra:
         assert fold((1, 2, 3, 2), table) == g((1, 2, 3, 2))   # 8%4=0
 
     def test_conflict_detects_non_associative(self):
-        # dữ liệu mâu thuẫn cho cùng key ⟹ conflict > 0
+        # conflicting data for the same key ⟹ conflict > 0
         chains = [((0, 0), "x"), ((0, 0), "y")]
         _, conf, _ = learn_composition(chains)
         assert conf > 0

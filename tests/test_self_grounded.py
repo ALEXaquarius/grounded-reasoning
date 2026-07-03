@@ -1,6 +1,7 @@
 """
-Tests OFFLINE cho Self-Grounded Deductive Consistency (SGDC) + chứng chỉ mâu thuẫn
-phổ. Không gọi mạng — khóa phần LOGIC (đại số), phần LLM đo ở experiment.
+OFFLINE tests for Self-Grounded Deductive Consistency (SGDC) + the spectral
+contradiction certificate. No network calls — locks down the algebraic LOGIC; the
+LLM-side measurement lives in the experiment.
 """
 
 from src.reasoning.operator_algebra import OperatorRelationAlgebra
@@ -16,36 +17,36 @@ def _alg(pairs):
 
 class TestSGDCLogic:
     def test_self_closure_filters_unentailed_claims(self):
-        # fact nguyên tử (đúng) → đóng kín chứng nhận
+        # atomic facts (correct) → certified closure
         atoms = [("sparrow", "bird"), ("bird", "animal"), ("animal", "organism")]
         alg = _alg(atoms)
-        # LLM claim multi-hop: có cái ĐÚNG (entailed) + cái ẢO GIÁC (không entailed)
-        claimed = {"animal", "organism", "plant"}   # plant không suy ra được
+        # multi-hop LLM claim: mixes CORRECT (entailed) with HALLUCINATED (not entailed)
+        claimed = {"animal", "organism", "plant"}   # plant cannot be derived
         kept = {c for c in claimed if c in alg.closure("sparrow", "is a")}
-        assert kept == {"animal", "organism"}        # loại đúng 'plant' ảo giác
+        assert kept == {"animal", "organism"}        # correctly drops the hallucinated 'plant'
         assert "plant" not in kept
 
     def test_sgdc_precision_one_when_atoms_correct(self):
-        # nếu fact nguyên tử ĐÚNG, mọi claim còn lại sau lọc đều grounded ⟹ precision=1
+        # if the atomic facts are CORRECT, every claim surviving the filter is grounded ⟹ precision=1
         atoms = [("a", "b"), ("b", "c"), ("c", "d")]
         alg = _alg(atoms)
         truth = alg.closure("a", "is a")             # {b,c,d}
-        claimed = {"b", "c", "d", "x", "y"}          # x,y bịa
+        claimed = {"b", "c", "d", "x", "y"}          # x,y are fabricated
         kept = {c for c in claimed if c in alg.closure("a", "is a")}
         fp = len(kept - truth)
-        assert fp == 0                               # 0 dương-tính-giả
+        assert fp == 0                               # 0 false positives
 
 
 class TestSpectralContradiction:
     def test_cycle_in_asserted_is_a_is_certified(self):
-        # LLM tự khẳng định chu trình is-a mâu thuẫn: cat→mammal→animal→cat
+        # LLM self-asserts a contradictory is-a cycle: cat→mammal→animal→cat
         alg = _alg([("cat", "mammal"), ("mammal", "animal"), ("animal", "cat"),
                     ("dog", "mammal")])
         A = alg.operator("is a").astype(float).T
-        assert not is_acyclic(A)                      # phát hiện mâu thuẫn
-        assert spectral_radius(A) >= 1.0 - 1e-9       # chứng chỉ phổ ρ≥1
-        members = {alg._names[i] for i in cycle_members(A)}  # idx → tên
-        assert {"cat", "mammal", "animal"} <= members  # định vị chu trình
+        assert not is_acyclic(A)                      # contradiction detected
+        assert spectral_radius(A) >= 1.0 - 1e-9       # spectral certificate rho>=1
+        members = {alg._names[i] for i in cycle_members(A)}  # idx → name
+        assert {"cat", "mammal", "animal"} <= members  # cycle localized
 
     def test_consistent_hierarchy_has_zero_radius(self):
         alg = _alg([("cat", "mammal"), ("mammal", "animal"), ("animal", "organism")])

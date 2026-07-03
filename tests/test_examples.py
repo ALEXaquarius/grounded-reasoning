@@ -1,6 +1,7 @@
 """
-Test OFFLINE cho ví dụ examples/hallucination_demo: hệ grounded phải đúng 100% trên
-thế giới của ví dụ (không gọi LLM). Khóa logic + thế giới của demo.
+OFFLINE test for the examples/hallucination_demo example: the grounded system must
+be 100% correct on the example's world (no LLM calls). Locks down the demo's logic
+and world data.
 """
 import importlib.util
 import pathlib
@@ -19,15 +20,15 @@ def test_grounded_perfect_on_demo_world():
     for subj, obj, via, _desc, gold in _demo.QUESTIONS:
         v = gr.verify(subj, obj, via=via)
         assert v.grounded == gold, (subj, obj, via)
-        # 'CÓ' luôn kèm đường đi; 'KHÔNG' không bịa đường
+        # a 'YES' answer always carries a proof path; a 'NO' answer never fabricates one
         assert (v.proof is not None) == gold
 
 
 def test_deep_chain_and_reverse_trap():
     gr = GroundedReasoner()
     gr.add_facts(_demo.FACTS)
-    # chuỗi sâu 9 bước
+    # 9-hop deep chain
     assert gr.verify("Tùng", "Vũ", via="quản lý").proof == _demo.CHAIN
-    # ngược hướng ⟹ không grounded (điểm LLM hay bịa)
+    # reversed direction ⟹ not grounded (a spot where LLMs tend to fabricate)
     assert not gr.verify("Toàn", "Thành", via="quản lý").grounded
     assert not gr.verify("Kho K9", "Tùng", via="sở hữu").grounded

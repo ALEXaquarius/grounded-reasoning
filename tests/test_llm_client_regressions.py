@@ -1,17 +1,19 @@
 """
-Test hồi quy từ fuzz `llm_client.py` (1500 lượt __init__ + 500 lượt mock response
-API méo mó) — tìm ra 2 bug thật, đã sửa; khóa lại để không tái phát. Không gọi mạng
-(mock `_opener.open`), không cần API key thật.
+Regression tests from fuzzing `llm_client.py` (1500 __init__ runs + 500 malformed
+mock API response runs) — found 2 real bugs, now fixed; locked down here to prevent
+recurrence. No network calls (mocks `_opener.open`), no real API key needed.
 
-Bug 1 — `LLMClient.__init__` chỉ kiểm tra `base_url is None` để bắt lỗi "provider lạ
-+ không có base_url", nên `base_url=""` (chuỗi rỗng, falsy nhưng không phải None)
-LỌT QUA guard, tạo ra client với `url=''` — không lỗi ngay mà chỉ vỡ khi thực sự gọi
-API với thông báo khó hiểu. Sửa: dùng `not base_url` (bắt cả None lẫn chuỗi rỗng).
+Bug 1 — `LLMClient.__init__` only checked `base_url is None` to catch the "unknown
+provider + no base_url" error, so `base_url=""` (an empty string, falsy but not
+None) SLIPPED PAST the guard, creating a client with `url=''` — it didn't fail
+immediately, only breaking later with a confusing message when the API was actually
+called. Fix: use `not base_url` (catches both None and the empty string).
 
-Bug 2 — `_post` không kiểm tra `data["choices"]` trước khi để `ask()`/`chat()`
-truy cập `data["choices"][0]`. Khi API trả JSON hợp lệ nhưng `choices` rỗng/thiếu
-(rate limit, content filter, lỗi provider…) ⟹ `IndexError`/`KeyError` khó hiểu,
-không có ngữ cảnh response gốc để debug. Sửa: raise RuntimeError rõ ràng kèm response.
+Bug 2 — `_post` did not check `data["choices"]` before letting `ask()`/`chat()`
+access `data["choices"][0]`. When the API returns valid JSON but `choices` is
+empty/missing (rate limiting, content filter, provider error, ...) ⟹ a confusing
+`IndexError`/`KeyError` with no original response context for debugging. Fix: raise
+a clear RuntimeError including the response.
 """
 import json
 import os
@@ -50,16 +52,16 @@ class TestUnknownProviderEmptyBaseUrlRegression:
 
     def test_none_base_url_still_raises(self):
         with pytest.raises(ValueError):
-            LLMClient(provider="unknown_xyz")   # base_url mặc định None
+            LLMClient(provider="unknown_xyz")   # base_url defaults to None
 
     def test_known_provider_with_empty_base_url_ignores_it(self):
-        # provider hợp lệ + base_url="" -> "" bị bỏ qua (falsy), dùng preset provider
+        # valid provider + base_url="" -> "" is ignored (falsy), preset provider is used
         os.environ["DEEPSEEK_API_KEY"] = "fake"
         client = LLMClient(provider="deepseek", base_url="")
         assert client.url == "https://api.deepseek.com/v1/chat/completions"
 
     def test_real_base_url_still_bypasses_key_requirement(self):
-        # hành vi cũ (base_url thật -> key tuỳ chọn) không bị hồi quy
+        # old behavior (real base_url -> key optional) is not regressed
         client = LLMClient(base_url="http://localhost:9999/v1/chat", api_key_env="NOPE_XYZ")
         assert client.url == "http://localhost:9999/v1/chat"
 

@@ -1,8 +1,9 @@
 """
-Bất biến cho các hàm build-world/ground-truth-closure trong src/experiments/*_eval.py
-— khóa lại từ fuzz ~700 lượt (đối chiếu BFS độc lập trên cạnh chúng tự sinh): 0 bug,
-nhưng ground-truth này được DÙNG LÀM ĐÁP ÁN ĐÚNG trong các thực nghiệm LLM báo cáo ở
-PAPER.md, nên đáng bảo vệ vĩnh viễn khỏi hồi quy im lặng.
+Invariants for the build-world/ground-truth-closure functions in
+src/experiments/*_eval.py — locked down from ~700 fuzzing runs (cross-checked
+against an independent BFS over the edges they generate): 0 bugs found, but this
+ground truth is USED AS THE CORRECT ANSWER in the LLM experiments reported in
+PAPER.md, so it deserves permanent protection against silent regressions.
 """
 
 

@@ -1,20 +1,23 @@
 """
-Test hồi quy từ fuzz `relation_spectrum.py` (~3000 lượt, ma trận ngẫu nhiên đối
-chiếu DFS/BFS thuần) — tìm ra 2 bug thật, đã sửa; khóa lại để không tái phát.
+Regression tests from fuzzing `relation_spectrum.py` (~3000 runs, random matrices
+cross-checked against plain DFS/BFS) — found 2 real bugs, now fixed; locked down
+here to prevent recurrence.
 
-Bug 1 — `is_nilpotent`/`cycle_members` dùng TRỰC TIẾP ma trận trọng số để kiểm tra
-nilpotency (Aⁿ). Với chu trình THẬT có trọng số cạnh <1 (vd 0.5) và đủ dài, các
-phần tử Aⁿ suy giảm theo hàm mũ và tụt dưới `tol=1e-9` THUẦN VÌ SỐ HỌC — không phải
-vì đồ thị acyclic. Kết quả: `is_acyclic(A)=True` dù `spectral_radius(A)=0.5>0` —
-mâu thuẫn ngay với chính docstring "ACYCLIC ⟺ ρ(A)=0". Sửa: nhị phân hóa ma trận
-trước khi kiểm tra nilpotency (acyclicity là thuộc tính TÔ-PÔ, không phụ thuộc
-trọng số cạnh).
+Bug 1 — `is_nilpotent`/`cycle_members` used the weighted matrix DIRECTLY to test
+nilpotency (A^n). For a REAL cycle with edge weight <1 (e.g. 0.5) and enough
+length, the entries of A^n decay exponentially and fall below `tol=1e-9` PURELY
+FOR NUMERICAL REASONS — not because the graph is acyclic. Result:
+`is_acyclic(A)=True` even though `spectral_radius(A)=0.5>0` — directly
+contradicting the docstring's own claim "ACYCLIC <=> rho(A)=0". Fix: binarize the
+matrix before testing nilpotency (acyclicity is a TOPOLOGICAL property, independent
+of edge weights).
 
-Bug 2 — `katz_resolvent` không kiểm tra điều kiện hội tụ α·ρ(A)<1 của chuỗi
-Neumann. Khi α·ρ(A)≥1 (miền phân kỳ), `np.linalg.inv` vẫn chạy được (ma trận
-không suy biến CHÍNH XÁC) và trả về một ma trận "trông hợp lý" nhưng KHÔNG bằng
-Σα^k A^k nữa (chuỗi thật sự phân kỳ) — sai âm thầm, không cảnh báo. Sửa: raise
-ValueError rõ ràng khi α·ρ(A)≥1.
+Bug 2 — `katz_resolvent` did not check the Neumann series convergence condition
+alpha*rho(A)<1. When alpha*rho(A)>=1 (the divergent regime), `np.linalg.inv` still
+runs successfully (the matrix isn't EXACTLY singular) and returns a
+"plausible-looking" matrix that no longer equals Sum(alpha^k A^k) (the series
+truly diverges) — a silent wrong answer with no warning. Fix: raise a clear
+ValueError when alpha*rho(A)>=1.
 """
 import numpy as np
 import pytest
@@ -28,11 +31,11 @@ from src.reasoning.relation_spectrum import (
 
 
 class TestWeightedCycleRegression:
-    """Bug 1: acyclicity phải là thuộc tính CẤU TRÚC, không phụ thuộc trọng số."""
+    """Bug 1: acyclicity must be a STRUCTURAL property, independent of edge weights."""
 
     def test_exact_fuzz_repro_weighted_long_cycle(self):
-        # đồ thị fuzz tìm được (seed=414909873): chu trình trọng số 0.5 dài, sau
-        # matrix-power sẽ suy giảm dưới tol nếu không nhị phân hóa.
+        # graph found by fuzzing (seed=414909873): a long cycle with weight 0.5,
+        # which decays below tol after matrix-power unless binarized first.
         import random
         rng = random.Random(414909873)
         n = 30
@@ -40,29 +43,29 @@ class TestWeightedCycleRegression:
         for _ in range(int(n * 0.2)):
             i, j = rng.randrange(n), rng.randrange(n)
             A[i, j] = rng.choice([1.0, 2.0, 0.5])
-        assert not is_acyclic(A)          # phải phát hiện ĐÚNG là có chu trình
+        assert not is_acyclic(A)          # must correctly detect a cycle
         assert len(cycle_members(A)) > 0
-        assert spectral_radius(A) > 1e-6  # nhất quán với is_acyclic
+        assert spectral_radius(A) > 1e-6  # consistent with is_acyclic
 
     def test_small_weight_cycle_still_detected(self):
-        # chu trình 2 node, trọng số RẤT nhỏ nhưng KHÔNG bằng 0 — vẫn phải acyclic=False
+        # 2-node cycle with a VERY small but nonzero weight — must still be acyclic=False
         A = np.array([[0.0, 0.01], [0.01, 0.0]])
         assert not is_acyclic(A)
         assert cycle_members(A) == {0, 1}
 
     def test_weighted_dag_still_acyclic(self):
-        # DAG thật (không chu trình) dù có trọng số — phải vẫn acyclic=True
+        # a real DAG (no cycle) despite having weights — must still be acyclic=True
         A = np.array([[0.0, 0.5, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]])
         assert is_acyclic(A)
         assert cycle_members(A) == set()
         assert spectral_radius(A) < 1e-9
 
     def test_is_acyclic_consistent_with_spectral_radius(self):
-        # bất biến chung: is_acyclic ⟺ spectral_radius≈0 (Định lý H), phải luôn đúng
+        # general invariant: is_acyclic <=> spectral_radius~=0 (Theorem H), must always hold
         cases = [
-            np.array([[0.0, 3.0], [0.0, 0.0]]),          # DAG trọng số
-            np.array([[0.0, 0.3], [0.3, 0.0]]),           # chu trình trọng số nhỏ
-            np.zeros((4, 4)),                              # rỗng
+            np.array([[0.0, 3.0], [0.0, 0.0]]),          # weighted DAG
+            np.array([[0.0, 0.3], [0.3, 0.0]]),           # small-weight cycle
+            np.zeros((4, 4)),                              # empty
         ]
         for A in cases:
             acyc = is_acyclic(A)
@@ -71,7 +74,7 @@ class TestWeightedCycleRegression:
 
 
 class TestKatzDivergenceRegression:
-    """Bug 2: katz_resolvent phải raise rõ khi α·ρ(A)≥1, không âm thầm sai."""
+    """Bug 2: katz_resolvent must raise clearly when alpha*rho(A)>=1, not fail silently."""
 
     def test_divergent_regime_raises(self):
         B = np.array([[0.0, 2.0], [2.0, 0.0]])  # rho=2
@@ -81,7 +84,7 @@ class TestKatzDivergenceRegression:
     def test_boundary_alpha_rho_equals_one_raises(self):
         B = np.array([[0.0, 1.0], [1.0, 0.0]])  # rho=1
         with pytest.raises(ValueError):
-            katz_resolvent(B, 1.0)               # alpha*rho=1.0 (biên, KHÔNG hội tụ)
+            katz_resolvent(B, 1.0)               # alpha*rho=1.0 (boundary, does NOT converge)
 
     def test_convergent_regime_still_works(self):
         B = np.array([[0.0, 2.0], [2.0, 0.0]])  # rho=2
@@ -91,5 +94,5 @@ class TestKatzDivergenceRegression:
 
     def test_acyclic_zero_alpha_rho_never_raises(self):
         A = np.array([[0.0, 1.0], [0.0, 0.0]])  # DAG, rho=0
-        kz = katz_resolvent(A, 0.99)             # alpha*0=0 < 1 luôn OK dù alpha lớn
+        kz = katz_resolvent(A, 0.99)             # alpha*0=0 < 1 always OK regardless of alpha
         assert np.isfinite(kz).all()

@@ -1,5 +1,5 @@
 """
-Tests cho đại số TOÁN TỬ của quan hệ (OperatorRelationAlgebra).
+Tests for the OPERATOR algebra of relations (OperatorRelationAlgebra).
 """
 from src.reasoning.operator_algebra import OperatorRelationAlgebra
 
@@ -20,21 +20,21 @@ class TestOperatorAlgebra:
 
     def test_closure_is_ancestor(self):
         a = _kin()
-        # đóng kín bắc cầu: mọi tổ tiên của eve
+        # transitive closure: every ancestor of eve
         assert a.closure("eve", "parent") == {"dave", "carol", "al", "x1"}
 
     def test_inverse_follow_is_transpose(self):
         a = _kin()
-        # ai có parent = carol? → dave
+        # who has parent = carol? → dave
         assert a.inverse_follow("carol", "parent") == {"dave"}
         assert a.inverse_follow("al", "parent") == {"carol"}
 
     def test_analogy_applies_inferred_relation(self):
         a = _kin()
-        # dave:carol :: eve:? — suy 'parent', áp lên eve → dave
+        # dave:carol :: eve:? — infers 'parent', applies to eve → dave
         assert a.analogy("dave", "carol", "eve") == {"dave"}
 
     def test_no_path_returns_empty(self):
         a = _kin()
-        assert a.follow("x1", ["parent"]) == set()      # x1 không có parent
-        assert a.follow("dave", ["owns"]) == set()       # quan hệ không tồn tại
+        assert a.follow("x1", ["parent"]) == set()      # x1 has no parent
+        assert a.follow("dave", ["owns"]) == set()       # relation does not exist

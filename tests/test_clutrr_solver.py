@@ -22,22 +22,24 @@ def test_path_relations_shortest():
 
 def test_path_relations_self_cycle_regression():
     """
-    Fuzz (~2000 lượt, đối chiếu BFS độc lập) tìm ra: path_relations có cùng lớp bug
-    self-cycle đã sửa ở GroundedReasoner._path_via/FuzzyInferenceEngine.explain — BFS
-    seed prev={src:None} trước vòng lặp khiến KHÔNG BAO GIỜ phát hiện được đường quay
-    lại chính src (query_edge=(x,x) qua chu trình). Hàm này không được `run()` dùng
-    (clean_chain luôn cho src≠dst) nên không ảnh hưởng số liệu benchmark đã công bố,
-    nhưng vẫn là bug thật trên hàm công khai — sửa & khóa lại.
+    Fuzzing (~2000 runs, cross-checked against an independent BFS) found that
+    path_relations has the same self-cycle bug class fixed in
+    GroundedReasoner._path_via/FuzzyInferenceEngine.explain — seeding the BFS with
+    prev={src:None} before the loop means it can NEVER detect a path looping back
+    to src itself (query_edge=(x,x) via a cycle). This function isn't used by
+    `run()` (clean_chain always ensures src≠dst), so it does not affect the
+    published benchmark numbers, but it is still a real bug on a public function —
+    fixed and locked down here.
     """
     row = {"story_edges": [(0, 1), (1, 0)], "edge_types": ["a", "b"], "query_edge": (0, 0)}
     assert path_relations(row) == [("a", 1), ("b", 0)]
 
-    # tự-chu-trình dài hơn (3 node)
+    # longer self-cycle (3 nodes)
     row2 = {"story_edges": [(0, 1), (1, 2), (2, 0)], "edge_types": ["a", "b", "c"],
             "query_edge": (0, 0)}
     assert path_relations(row2) == [("a", 1), ("b", 2), ("c", 0)]
 
-    # không có chu trình quay lại src -> vẫn phải None (không bịa)
+    # no cycle back to src -> must still be None (no fabrication)
     row3 = {"story_edges": [(0, 1), (1, 2)], "edge_types": ["a", "b"], "query_edge": (0, 0)}
     assert path_relations(row3) is None
 
@@ -56,7 +58,7 @@ def test_clean_chain_filters_noise():
 
 
 def test_solve_folds_composition():
-    # bảng: son∘daughter(→nữ) = granddaughter; granddaughter∘brother(→nam)=grandson
+    # table: son∘daughter(→female) = granddaughter; granddaughter∘brother(→male)=grandson
     table = {
         ("son", "daughter", "female"): "granddaughter",
         ("granddaughter", "brother", "male"): "grandson",
@@ -69,12 +71,12 @@ def test_solve_folds_composition():
 def test_solve_returns_none_when_rule_missing():
     table = {("son", "daughter", "female"): "granddaughter"}
     gorder = ["male", "male", "female", "male"]
-    rels = [("son", 1), ("daughter", 2), ("brother", 3)]  # thiếu luật bước 2
+    rels = [("son", 1), ("daughter", 2), ("brother", 3)]  # missing rule for step 2
     assert solve(rels, gorder, table) is None
 
 
 def test_closure_learns_missing_rule_from_longer_chain():
-    # hop-2 dạy luật cơ sở; hop-3 (gold) suy ra luật hợp thành còn thiếu
+    # hop-2 teaches the base rule; hop-3 (gold) infers the missing composed rule
     def row(story_edges, edge_types, genders, target, k):
         return {
             "story_edges": str(story_edges), "edge_types": str(edge_types),
@@ -84,15 +86,15 @@ def test_closure_learns_missing_rule_from_longer_chain():
         # son∘daughter (→female) = granddaughter  (hop-2)
         row([(0, 1), (1, 2)], ["son", "daughter"], "A:male,B:male,C:female",
             "granddaughter", 2),
-        # son-daughter-brother (→male) = grandson  (hop-3, gold cho luật mới)
+        # son-daughter-brother (→male) = grandson  (hop-3, gold for the new rule)
         row([(0, 1), (1, 2), (2, 3)], ["son", "daughter", "brother"],
             "A:male,B:male,C:female,D:male", "grandson", 3),
     ]
     table = learn_table_closure(train)
-    # luật cơ sở đã học
+    # base rule learned
     assert table[("son", "daughter", "female")] == "granddaughter"
-    # luật hợp thành (granddaughter∘brother→male) suy ra được từ chuỗi hop-3
+    # composed rule (granddaughter∘brother→male) inferred from the hop-3 chain
     assert table[("granddaughter", "brother", "male")] == "grandson"
-    # ⟹ giải được chuỗi hop-3 đầy đủ
+    # ⟹ the full hop-3 chain can now be solved
     assert solve([("son", 1), ("daughter", 2), ("brother", 3)],
                  ["male", "male", "female", "male"], table) == "grandson"

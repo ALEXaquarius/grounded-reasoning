@@ -1,7 +1,7 @@
 """
-Robustness / edge-case / hang-safety cho lớp agent (GroundedReasoner + tool).
-Bao các lỗi từng gây crash hoặc chậm: quan hệ/khái niệm lạ, đồ thị rỗng, chu trình,
-self-loop, đầu vào tool sai dạng, và đồ thị LỚN (không treo).
+Robustness / edge-case / hang-safety tests for the agent layer (GroundedReasoner + tool).
+Covers issues that previously caused crashes or slowness: unknown relations/concepts,
+empty graphs, cycles, self-loops, malformed tool input, and LARGE graphs (no hangs).
 """
 import time
 
@@ -31,7 +31,7 @@ class TestNoCrash:
 
     def test_add_facts_malformed_raises_clean(self):
         with pytest.raises(ValueError):
-            GroundedReasoner().add_facts([("a", "b")])            # 2-tuple
+            GroundedReasoner().add_facts([("a", "b")])            # a 2-tuple
 
 
 class TestCyclesNoHang:
@@ -39,7 +39,7 @@ class TestCyclesNoHang:
         g = GroundedReasoner()
         g.add_facts([("a", "r", "b"), ("b", "r", "c"), ("c", "r", "a")])
         assert g.verify("a", "c", via="r").grounded
-        assert g.verify("c", "b", via="r").grounded              # vòng ⟹ tới được
+        assert g.verify("c", "b", via="r").grounded              # cycle ⟹ reachable
 
     def test_self_loop(self):
         g = GroundedReasoner()
@@ -75,7 +75,7 @@ class TestScale:
         t = time.time()
         v = g.verify("n0", f"n{n}", via="r")
         assert v.grounded and len(v.proof) == n + 1
-        assert time.time() - t < 5.0                              # không treo
+        assert time.time() - t < 5.0                              # does not hang
         assert not g.verify("n0", "absent", via="r").grounded
 
     def test_large_cycle_contradiction_is_fast(self):
@@ -83,5 +83,5 @@ class TestScale:
         n = 2000
         g.add_facts([(f"c{i}", "r", f"c{(i+1) % n}") for i in range(n)])
         t = time.time()
-        assert g.contradictions("r")                              # phát hiện chu trình
+        assert g.contradictions("r")                              # cycle detected
         assert time.time() - t < 2.0

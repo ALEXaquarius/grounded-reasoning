@@ -1,24 +1,28 @@
 """
-Test hồi quy từ FUZZ NGẪU NHIÊN (đối chiếu GroundedReasoner với BFS/DFS độc lập trên
-~9500 đồ thị ngẫu nhiên: dày/thưa, có/không chu trình, self-loop, multi-edge, tên
-Unicode đa ngữ). Tìm ra 2 bug thật, đã sửa; khóa lại để không tái phát.
+Regression tests from RANDOM FUZZING (cross-checking GroundedReasoner against an
+independent BFS/DFS over ~9500 random graphs: dense/sparse, cyclic/acyclic,
+self-loops, multi-edges, multilingual Unicode names). Found 2 real bugs, now fixed;
+locked down here to prevent recurrence.
 
-Bug 1 — `GroundedReasoner._path_via`: BFS seed `prev={subject: None}` trước khi
-chạy khiến điều kiện `v not in prev` luôn False khi `v==subject`, nên KHÔNG BAO GIỜ
-phát hiện được đường quay lại subject (self-loop/chu trình khi obj==subject) — dù đồ
-thị nhỏ hay verify(x,x,via=None) qua engine khác vẫn đúng. Ảnh hưởng: sau khi tối ưu
-hiệu năng (BFS O(V+E) thay ma trận), verify(x,x,via=rel) LUÔN trả False dù có chu
-trình thật.
+Bug 1 — `GroundedReasoner._path_via`: seeding the BFS with `prev={subject: None}`
+before running makes the condition `v not in prev` always False when `v==subject`,
+so it could NEVER detect a path looping back to subject (a self-loop/cycle when
+obj==subject) — even though small graphs or verify(x,x,via=None) via the other
+engine gave the correct answer. Impact: after a performance optimization (BFS
+O(V+E) instead of a matrix), verify(x,x,via=rel) ALWAYS returned False even when a
+real cycle existed.
 
-Bug 2 — `FuzzyInferenceEngine.explain`: case đặc biệt `if a==b: return [a]` coi
-self-identity là "grounded" qua đường-0-bước, TRÁI với chính Định lý Guard Soundness
-đã tuyên bố (explain(a,b)≠None ⟺ b reachable từ a). Hệ quả: verify(x,x,via=None) và
-HallucinationGuard.verify(x,x) chấp nhận claim "x liên hệ x" dù KHÔNG có fact nào hỗ
-trợ (confidence=0.0 nhưng grounded=True) — vi phạm đúng lời hứa cốt lõi của guard.
+Bug 2 — `FuzzyInferenceEngine.explain`: the special case `if a==b: return [a]`
+treats self-identity as "grounded" via a 0-hop path, CONTRADICTING the very Guard
+Soundness Theorem it claims to satisfy (explain(a,b)!=None <=> b is reachable from
+a). Consequence: verify(x,x,via=None) and HallucinationGuard.verify(x,x) accepted
+the claim "x relates to x" even with NO supporting fact (confidence=0.0 but
+grounded=True) — violating the guard's core promise.
 
-Cả hai đã sửa bằng cùng một mẫu: kiểm tra đích TRƯỚC khi gate theo tập visited, và
-tái tạo đường đi bằng cách đi ngược từ đỉnh liền trước (u) thay vì từ đích (v) — vì
-khi obj==subject, v trùng subject ngay từ đầu nên không dùng làm điều kiện dừng được.
+Both were fixed with the same pattern: check the target BEFORE gating on the
+visited set, and reconstruct the path by walking backward from the predecessor
+node (u) rather than from the target (v) — since when obj==subject, v equals
+subject from the very start, so it cannot be used as the stopping condition.
 """
 import random
 
@@ -27,11 +31,11 @@ from src.reasoning.abstract_inference import FuzzyInferenceEngine, Hallucination
 
 
 class TestSelfCycleRegression:
-    """Bug 1: verify(via=rel) phải phát hiện chu trình quay lại subject."""
+    """Bug 1: verify(via=rel) must detect a cycle looping back to subject."""
 
     def test_exact_fuzz_repro_multiedge_cycle(self):
-        # đồ thị tìm được từ fuzz (seed=578895315): wa_2 -> hl_0 -> wa_2 là chu trình
-        # thật, nhưng lib từng trả False.
+        # graph found by fuzzing (seed=578895315): wa_2 -> hl_0 -> wa_2 is a real
+        # cycle, but the library used to return False.
         edges = [
             ("hl_0", "wa_2"), ("hl_0", "io_1"), ("io_1", "hl_0"),
             ("io_1", "hl_0"), ("wa_2", "hl_0"), ("hl_0", "hl_0"),
@@ -43,7 +47,7 @@ class TestSelfCycleRegression:
         assert v.proof[0] == "wa_2" and v.proof[-1] == "wa_2"
         adjset = set(edges)
         for a, b in zip(v.proof, v.proof[1:]):
-            assert (a, b) in adjset, f"cạnh {a}->{b} không có thật trong đồ thị"
+            assert (a, b) in adjset, f"edge {a}->{b} does not really exist in the graph"
 
     def test_direct_self_loop_grounded(self):
         gr = GroundedReasoner()
@@ -52,7 +56,7 @@ class TestSelfCycleRegression:
         assert v.grounded and v.proof == ["x", "x"]
 
     def test_no_cycle_self_query_not_grounded(self):
-        # p có cạnh ra nhưng KHÔNG quay lại p ⟹ verify(p,p) phải False
+        # p has an outgoing edge but does NOT loop back to p ⟹ verify(p,p) must be False
         gr = GroundedReasoner()
         gr.add_facts([("p", "r", "q")])
         v = gr.verify("p", "p", via="r")
@@ -63,19 +67,19 @@ class TestSelfCycleRegression:
         gr.add_facts([("a", "r", "b"), ("b", "r", "c"), ("c", "r", "a")])
         v = gr.verify("a", "a", via="r")
         assert v.grounded and v.proof[0] == "a" and v.proof[-1] == "a"
-        # verify các node khác trên chu trình vẫn đúng (không hồi quy)
+        # verifying other nodes on the cycle still works correctly (no regression)
         assert gr.verify("b", "c", via="r").grounded
-        assert gr.verify("c", "b", via="r").grounded  # đi vòng qua a
+        assert gr.verify("c", "b", via="r").grounded  # goes around via a
 
 
 class TestSelfIdentitySoundnessRegression:
-    """Bug 2: explain/verify KHÔNG được coi self-identity là grounded nếu vô căn cứ."""
+    """Bug 2: explain/verify must NOT treat self-identity as grounded when unsupported."""
 
     def test_engine_explain_no_cycle_returns_none(self):
         e = FuzzyInferenceEngine()
-        e.add_relation("x", "y")   # x có cạnh ra, không cycle
+        e.add_relation("x", "y")   # x has an outgoing edge, no cycle
         assert e.explain("x", "x") is None
-        assert e.confidence("x", "x") == 0.0   # nhất quán với explain
+        assert e.confidence("x", "x") == 0.0   # consistent with explain
 
     def test_engine_explain_real_cycle_returns_path(self):
         e = FuzzyInferenceEngine()
@@ -92,7 +96,7 @@ class TestSelfIdentitySoundnessRegression:
         e.add_relation("a", "b")
         g = HallucinationGuard(e)
         ok, path = g.verify("a", "a")
-        assert not ok and path is None    # KHÔNG chấp nhận claim vô căn cứ
+        assert not ok and path is None    # does NOT accept an unsupported claim
 
     def test_guard_accepts_real_self_cycle(self):
         e = FuzzyInferenceEngine()
@@ -102,22 +106,22 @@ class TestSelfIdentitySoundnessRegression:
         assert ok and path == ["a", "b", "a"]
 
     def test_groundedreasoner_verify_via_none_consistent_with_via_rel(self):
-        # via=None (FuzzyInferenceEngine) và via=rel (OperatorRelationAlgebra) phải
-        # NHẤT QUÁN về việc self-identity có grounded hay không.
+        # via=None (FuzzyInferenceEngine) and via=rel (OperatorRelationAlgebra) must
+        # be CONSISTENT on whether self-identity is grounded.
         gr = GroundedReasoner()
-        gr.add_facts([("p", "r", "q")])   # không cycle
+        gr.add_facts([("p", "r", "q")])   # no cycle
         assert gr.verify("p", "p").grounded == gr.verify("p", "p", via="r").grounded
         assert not gr.verify("p", "p").grounded
 
         gr2 = GroundedReasoner()
-        gr2.add_facts([("a", "r", "b"), ("b", "r", "a")])   # cycle thật
+        gr2.add_facts([("a", "r", "b"), ("b", "r", "a")])   # real cycle
         assert gr2.verify("a", "a").grounded and gr2.verify("a", "a", via="r").grounded
 
 
 class TestBoundedFuzzProperty:
     """
-    Property test fuzz THU GỌN (seed cố định, nhanh cho CI): đối chiếu verify/
-    contradictions với BFS/DFS độc lập trên nhiều đồ thị ngẫu nhiên nhỏ.
+    A SCALED-DOWN fuzz property test (fixed seed, fast for CI): cross-checks
+    verify/contradictions against an independent BFS/DFS over many small random graphs.
     """
 
     @staticmethod
@@ -139,7 +143,7 @@ class TestBoundedFuzzProperty:
         return False
 
     def test_random_graphs_match_baseline_reachability(self):
-        rng = random.Random(20260702)  # seed cố định ⟹ tái lập được, không flaky
+        rng = random.Random(20260702)  # fixed seed ⟹ reproducible, not flaky
         for _ in range(200):
             n = rng.randint(1, 12)
             names = [f"n{i}" for i in range(n)]

@@ -1,20 +1,24 @@
 """
-Test hồi quy từ fuzz `composition_algebra.py` (800 lượt, đối chiếu cộng-mod-N thật)
-và `conformal_reasoning.py` (300 cấu hình phủ + 500 lượt ConformalReasoner + edge
-case) — tìm ra 2 bug crash thật, đã sửa; khóa lại để không tái phát.
+Regression tests from fuzzing `composition_algebra.py` (800 runs, cross-checked
+against real addition-mod-N) and `conformal_reasoning.py` (300 coverage configs +
+500 ConformalReasoner runs + edge cases) — found 2 real crash bugs, now fixed;
+locked down here to prevent recurrence.
 
-Bug 1 — `composition_algebra.fold(())`: chuỗi RỖNG khiến `spans=[]`, vòng lặp
-`while len(spans)>1` không chạy, rồi `return spans[0]` crash IndexError trên list
-rỗng. Sửa: trả None cho chuỗi rỗng (nhất quán với hợp đồng "None khi không rút gọn
-được", không bịa một identity element không tồn tại).
+Bug 1 — `composition_algebra.fold(())`: an EMPTY sequence leaves `spans=[]`, the
+`while len(spans)>1` loop never runs, and `return spans[0]` then crashes with
+IndexError on an empty list. Fix: return None for an empty sequence (consistent
+with the "None when no reduction is possible" contract, rather than fabricating a
+nonexistent identity element).
 
-Bug 2 — `conformal_reasoning.conformal_threshold([], alpha≥1/(n+1))`: với 0 điểm
-calibration VÀ alpha đủ lớn để `k=int(alpha*(n+1))≥1` (n=0 nên chỉ cần alpha≥1),
-biểu thức `s[min(k,n)-1]` = `s[min(k,0)-1]` = `s[-1]` trên list rỗng ⟹ IndexError.
-Bug lan tới `ConformalReasoner.calibrate([])` (dùng thật khi true_pairs rỗng, ví
-dụ nếu agent quên cấp ví dụ hiệu chỉnh). Sửa: raise ValueError rõ ràng — với 0 điểm
-calibration, bảo đảm phủ ≥1−α KHÔNG THỂ thiết lập được về mặt toán học (lập luận
-exchangeability cần ≥1 mẫu); thà báo lỗi còn hơn âm thầm trả ngưỡng vô căn cứ.
+Bug 2 — `conformal_reasoning.conformal_threshold([], alpha>=1/(n+1))`: with 0
+calibration points AND alpha large enough that `k=int(alpha*(n+1))>=1` (n=0, so
+alpha>=1 suffices), the expression `s[min(k,n)-1]` = `s[min(k,0)-1]` = `s[-1]` on
+an empty list ⟹ IndexError. The bug propagates to `ConformalReasoner.calibrate([])`
+(a real code path when true_pairs is empty, e.g. an agent forgetting to supply
+calibration examples). Fix: raise a clear ValueError — with 0 calibration points,
+the coverage guarantee >=1-alpha CANNOT be established mathematically (the
+exchangeability argument needs >=1 sample); better to error out than to silently
+return a baseless threshold.
 """
 import pytest
 
@@ -25,7 +29,7 @@ from src.reasoning.conformal_reasoning import ConformalReasoner, conformal_thres
 class TestCompositionEmptySequenceRegression:
     def test_fold_empty_sequence_returns_none(self):
         assert fold((), {}) is None
-        assert fold((), {("a", "b"): "c"}) is None  # bảng không rỗng vẫn None
+        assert fold((), {("a", "b"): "c"}) is None  # still None even with a nonempty table
 
     def test_fold_single_element_unaffected(self):
         assert fold((5,), {}) == 5
@@ -46,10 +50,10 @@ class TestConformalEmptyCalibrationRegression:
                 conformal_threshold([], alpha)
 
     def test_nonempty_still_works_after_fix(self):
-        # bất biến cũ (k<1 -> -inf) vẫn giữ nguyên cho n≥1
+        # the old invariant (k<1 -> -inf) still holds for n>=1
         assert conformal_threshold([1.0, 2.0, 3.0], 0.0) == float("-inf")
         tau = conformal_threshold([1.0, 2.0, 3.0], 1.0)
-        assert tau == 3.0   # alpha=1: chấp nhận chỉ điểm cao nhất
+        assert tau == 3.0   # alpha=1: only accept the single highest score
 
     def test_conformal_reasoner_calibrate_empty_raises(self):
         class _Engine:
@@ -58,7 +62,7 @@ class TestConformalEmptyCalibrationRegression:
 
         cr = ConformalReasoner(_Engine(), alpha=1.0)
         with pytest.raises(ValueError):
-            cr.calibrate([])   # true_pairs rỗng -> không thể hiệu chỉnh
+            cr.calibrate([])   # empty true_pairs -> cannot calibrate
 
     def test_conformal_reasoner_calibrate_nonempty_still_works(self):
         class _Engine:

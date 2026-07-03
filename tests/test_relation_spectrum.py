@@ -1,5 +1,5 @@
 """
-Tests cho PHỔ của toán tử quan hệ (relation_spectrum) — Định lý H.
+Tests for the relation operator SPECTRUM (relation_spectrum) — Theorem H.
 """
 import numpy as np
 
@@ -16,7 +16,7 @@ from src.reasoning.relation_spectrum import (
 def _dag(n=6):
     A = np.zeros((n, n))
     for i in range(1, n):
-        A[i, i - 1] = 1.0  # chuỗi i -> i-1 (DAG)
+        A[i, i - 1] = 1.0  # chain i -> i-1 (DAG)
     return A
 
 
@@ -28,15 +28,15 @@ class TestRelationSpectrum:
 
     def test_cycle_raises_spectral_radius(self):
         A = _dag()
-        A[0, A.shape[0] - 1] = 1.0  # đóng vòng → chu trình
+        A[0, A.shape[0] - 1] = 1.0  # closes the loop → a cycle
         assert not is_acyclic(A)
         assert spectral_radius(A) >= 1.0 - 1e-9
 
     def test_cycle_members_detected(self):
         n = 5
         A = np.zeros((n, n))
-        A[0, 1] = A[1, 2] = A[2, 0] = 1.0     # chu trình {0,1,2}
-        A[3, 4] = 1.0                          # nhánh rời acyclic
+        A[0, 1] = A[1, 2] = A[2, 0] = 1.0     # cycle {0,1,2}
+        A[3, 4] = 1.0                          # disconnected acyclic branch
         assert cycle_members(A) == {0, 1, 2}
 
     def test_katz_equals_finite_diffusion_on_dag(self):

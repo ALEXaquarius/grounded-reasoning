@@ -1,6 +1,6 @@
 """
-Tests OFFLINE cho client LLM đa-provider + vòng lặp tool-calling của agent_demo.
-Không gọi mạng: dùng client giả.
+OFFLINE tests for the multi-provider LLM client + agent_demo's tool-calling loop.
+No network calls: uses a fake client.
 """
 import json
 
@@ -15,7 +15,7 @@ class TestLLMClient:
             assert p in PROVIDERS
 
     def test_ollama_needs_no_key(self):
-        c = LLMClient(provider="ollama")           # key không bắt buộc
+        c = LLMClient(provider="ollama")           # API key is not required
         assert "11434" in c.url and c.model == "llama3.2"
 
     def test_unknown_provider_raises(self):
@@ -28,7 +28,7 @@ class TestLLMClient:
 
 
 class _FakeClient:
-    """Giả LLM: lượt 1 gọi tool, lượt 2 trả lời cuối."""
+    """Fake LLM: turn 1 calls the tool, turn 2 gives the final answer."""
 
     def __init__(self):
         self.turn = 0
@@ -43,7 +43,7 @@ class _FakeClient:
                 "function": {"name": "verify_relation",
                              "arguments": json.dumps({"subject": "Ann", "relation": "parent", "object": "Dan"})},
             }]}
-        # kiểm tra kết quả tool đã được đưa vào messages
+        # verify the tool result was appended to messages
         assert any(m.get("role") == "tool" for m in messages)
         return {"role": "assistant", "content": "Yes, grounded."}
 
