@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.alexaquarius/grounded-reasoning",
+  "title": "Grounded Reasoning",
+  "description": "Verify multi-hop relational claims before an agent asserts them — zero model tokens, precision-guaranteed, returns proof paths.",
+  "repository": {
+    "url": "https://github.com/ALEXaquarius/grounded-reasoning",
+    "source": "github"
+  },
+  "version": "0.1.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "grounded-reasoning",
+      "version": "0.1.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

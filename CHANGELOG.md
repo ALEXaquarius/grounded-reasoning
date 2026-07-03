@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.1 — MCP Registry metadata
+
+No code changes. Adds `server.json` and the `mcp-name` ownership marker in the
+README so the MCP server can be listed on the official MCP Registry
+(`io.github.alexaquarius/grounded-reasoning`), and updates install docs for the
+PyPI release.
+
 ## 0.1.0 — Initial public release
 
 The first public release of `grounded-reasoning`: a relation-algebra verifier for
