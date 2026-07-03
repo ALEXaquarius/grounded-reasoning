@@ -1,19 +1,20 @@
 """
-GroundedReasoner — facade tích hợp cho AGENT/LLM.
+GroundedReasoner — the integration facade for AGENTS/LLMs.
 
-Một mặt tiền gọn bọc lõi suy diễn (operator algebra + diffusion + guard) thành API
-mà agent dùng ngay: nạp fact, KIỂM CHỨNG claim quan hệ nhiều bước TRƯỚC khi khẳng
-định, trả về đường đi bằng chứng + độ tin cậy. Bắt ảo giác quan hệ với **0 token LLM**
-và **precision đảm bảo** (Định lý G: chấp nhận ⟺ có đường đi grounded).
+A thin facade wrapping the inference core (operator algebra + diffusion + guard)
+into an API an agent can use directly: load facts, VERIFY a multi-hop relational
+claim BEFORE asserting it, and get back a proof path + confidence. Catches
+relational hallucination at **0 LLM tokens** with a **precision guarantee**
+(Theorem G: accepted iff a grounded path exists).
 
-Ví dụ:
+Example:
     gr = GroundedReasoner()
-    for s, r, o in facts:            # fact 1-bước (agent cấp hoặc LLM tự trích)
+    for s, r, o in facts:            # one-hop facts (agent-supplied or LLM-extracted)
         gr.add_fact(s, r, o)
-    v = gr.verify("alice", "carol", via="parent")   # claim nhiều bước
-    if not v.grounded:               # ảo giác → chặn
+    v = gr.verify("alice", "carol", via="parent")   # a multi-hop claim
+    if not v.grounded:               # hallucination -> blocked
         ...
-    print(v.proof)                   # ['alice','bob','carol'] — bằng chứng
+    print(v.proof)                   # ['alice','bob','carol'] — the proof
 """
 from __future__ import annotations
 
@@ -25,11 +26,11 @@ from src.reasoning.operator_algebra import OperatorRelationAlgebra
 
 @dataclass
 class Verdict:
-    """Kết quả kiểm chứng một claim quan hệ."""
+    """The result of verifying a relational claim."""
 
     grounded: bool
-    proof: list[str] | None = None      # đường đi bằng chứng (None nếu không grounded)
-    confidence: float = 0.0             # niềm tin khuếch tán (giảm theo độ sâu)
+    proof: list[str] | None = None      # the proof path (None if not grounded)
+    confidence: float = 0.0             # diffused confidence (decreases with depth)
     relation: str | None = None
 
     def as_dict(self) -> dict:
@@ -43,12 +44,12 @@ class Verdict:
 
 class GroundedReasoner:
     """
-    Đồ thị quan hệ có kiểu + các phép kiểm chứng grounded cho agent.
+    A typed relation graph plus grounded verification operations for an agent.
 
     Parameters
     ----------
-    walk_len : độ sâu suy diễn tối đa cho điểm tin cậy.
-    alpha    : chiết khấu mỗi bước ∈ (0,1).
+    walk_len : maximum inference depth used for the confidence score.
+    alpha    : per-step discount in (0,1).
     """
 
     def __init__(self, walk_len: int = 8, alpha: float = 0.6) -> None:
@@ -57,11 +58,11 @@ class GroundedReasoner:
         self._typed: dict[str, dict[str, set[str]]] = {}  # rel -> a -> {b}
         self._relations: set[str] = set()
 
-    # -- xây đồ thị --------------------------------------------------------
+    # -- building the graph ---------------------------------------------------
     def add_fact(self, subject: str, relation: str, obj: str) -> None:
-        """Thêm một fact 1-bước (subject --relation--> obj)."""
+        """Add a one-hop fact (subject --relation--> obj)."""
         self._alg.add(subject, relation, obj)
-        self._eng.add_relation(subject, obj)                 # đồ thị any-relation
+        self._eng.add_relation(subject, obj)                 # the any-relation graph
         self._typed.setdefault(relation, {}).setdefault(subject, set()).add(obj)
         self._relations.add(relation)
 
@@ -69,25 +70,25 @@ class GroundedReasoner:
         for i, t in enumerate(triples):
             if len(t) != 3:
                 raise ValueError(
-                    f"fact #{i} phải là (subject, relation, object), nhận: {t!r}"
+                    f"fact #{i} must be (subject, relation, object), got: {t!r}"
                 )
             self.add_fact(*t)
 
-    # -- kiểm chứng --------------------------------------------------------
+    # -- verification -----------------------------------------------------------
     def verify(self, subject: str, obj: str, via: str | None = None) -> Verdict:
         """
-        Kiểm chứng claim: subject có liên hệ (bắc cầu) tới obj không?
+        Verify a claim: is subject transitively related to obj?
 
-        via=None  → qua đường đi BẤT KỲ quan hệ (grounded path tồn tại?).
-        via=rel   → qua đóng kín bắc cầu CỦA quan hệ rel (subject --rel*--> obj?).
+        via=None  -> via ANY relation path (does a grounded path exist?).
+        via=rel   -> via the transitive closure OF relation rel (subject --rel*--> obj?).
 
-        Chấp nhận ⟺ có đường đi thật ⟹ KHÔNG bao giờ chấp nhận ảo giác (Định lý G).
+        Accepted iff a real path exists, hence NEVER accepts a hallucination (Theorem G).
         """
         if via is None:
             path = self._eng.explain(subject, obj)
             conf = self._eng.confidence(subject, obj)
             return Verdict(path is not None, path, conf, None)
-        # BFS trên đồ thị-theo-quan-hệ: O(V+E), tránh ma trận dày (scale tới đồ thị lớn).
+        # BFS on the per-relation graph: O(V+E), avoiding a dense matrix (scales to large graphs).
         path = self._path_via(subject, obj, via)
         reachable = path is not None
         conf = self._eng.confidence(subject, obj) if reachable else 0.0
@@ -95,8 +96,9 @@ class GroundedReasoner:
 
     def filter_claims(self, claims) -> list[tuple[tuple, Verdict]]:
         """
-        Lọc một LÔ claim (subject, obj[, via]) của LLM — giữ cái grounded, chặn ảo
-        giác. Trả [(claim, Verdict)]. 0 token, precision đảm bảo.
+        Filter a BATCH of LLM claims (subject, obj[, via]) — keep the grounded
+        ones, block hallucinations. Returns [(claim, Verdict)]. 0 tokens,
+        precision guaranteed.
         """
         out = []
         for c in claims:
@@ -105,19 +107,20 @@ class GroundedReasoner:
             out.append((c, self.verify(subj, obj, via=via)))
         return out
 
-    # -- soundness / mâu thuẫn --------------------------------------------
+    # -- soundness / contradictions ----------------------------------------------
     def contradictions(self, relation: str) -> list[list[str]]:
         """
-        Phát hiện MÂU THUẪN: nếu `relation` đáng ra là thứ tự (acyclic) mà có chu
-        trình ⟹ trả các khái niệm trên MỘT chu trình (0 token). Rỗng = nhất quán.
+        Detect CONTRADICTIONS: if `relation` should be a partial order (acyclic)
+        but has a cycle, returns the concepts on ONE cycle (0 tokens). Empty means
+        consistent.
 
-        Dùng DFS phát hiện back-edge — O(V+E), không dùng trị riêng (tránh O(n³)).
-        (Tương đương phổ ρ>0 đã chứng minh ở Định lý H.)
+        Uses DFS back-edge detection — O(V+E), avoiding eigenvalues (which would
+        cost O(n^3)). (Equivalent to the spectral rho>0 test proved in Theorem H.)
         """
         adj = self._typed.get(relation, {})
         if not adj:
             return []
-        color: dict[str, int] = {}   # 0=chưa thăm, 1=đang trên stack, 2=xong
+        color: dict[str, int] = {}   # 0=unvisited, 1=on stack, 2=done
         parent: dict[str, str] = {}
         for root in list(adj.keys()):
             if color.get(root, 0) != 0:
@@ -133,7 +136,7 @@ class GroundedReasoner:
                         parent[nxt] = node
                         stack.append((nxt, iter(adj.get(nxt, ()))))
                         break
-                    if c == 1:  # back-edge node→nxt ⟹ có chu trình
+                    if c == 1:  # back-edge node->nxt means a cycle exists
                         cyc = [node]
                         x = node
                         while x != nxt and x in parent:
@@ -145,18 +148,19 @@ class GroundedReasoner:
                     stack.pop()
         return []
 
-    # -- nội bộ ------------------------------------------------------------
+    # -- internal ------------------------------------------------------------
     def _path_via(self, subject: str, obj: str, rel: str) -> list[str] | None:
         """
-        BFS ngắn nhất subject→obj qua ≥1 bước quan hệ rel. Kiểm tra `v==obj` TRƯỚC
-        khi gate theo `visited`, để phát hiện được đường quay lại CHÍNH subject
-        (self-loop hoặc chu trình khi obj==subject) — subject vẫn nằm trong
-        `visited` (seed sẵn, KHÔNG có entry trong `prev`) để không mở rộng lại nó
-        vô hạn khi obj≠subject.
+        Shortest BFS path subject→obj via >=1 rel-step. Checks `v==obj` BEFORE
+        gating on `visited`, so that a path back to subject ITSELF can be detected
+        (a self-loop or cycle when obj==subject) — subject is still seeded into
+        `visited` (with NO entry in `prev`) so it is never expanded again, keeping
+        the search finite when obj != subject.
 
-        Tái tạo đường đi đi NGƯỢC từ `u` (đỉnh nguồn của cạnh vừa khớp) qua `prev`
-        — không đi ngược từ `v` — vì khi obj==subject, `v` trùng subject ngay từ
-        phần tử đầu nên không thể dùng làm điều kiện dừng vòng lặp.
+        Reconstructs the path walking BACKWARD from `u` (the source endpoint of
+        the edge that just matched) via `prev` — not backward from `v` — because
+        when obj==subject, `v` equals subject from the very first element, so it
+        cannot be used as the loop's stopping condition.
         """
         adj = self._typed.get(rel, {})
         prev: dict[str, str] = {}

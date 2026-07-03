@@ -1,9 +1,9 @@
 """
-Lớp tích hợp AGENT/LLM cho suy diễn grounded.
+Agent/LLM integration layer for grounded reasoning.
 
-- GroundedReasoner : facade — nạp fact, kiểm chứng claim quan hệ nhiều bước.
-- verify_relation  : tool stateless cho function-calling (0 token, có bằng chứng).
-- TOOL_SPEC        : schema tool (Anthropic/OpenAI) để đăng ký với model.
+- GroundedReasoner : facade — load facts, verify multi-hop relational claims.
+- verify_relation  : a stateless function-calling tool (0 tokens, returns a proof).
+- TOOL_SPEC        : tool schema (Anthropic/OpenAI) for registering with a model.
 """
 from src.agent.tool import TOOL_SPEC, openai_tool_spec, run_tool, verify_relation
 from src.agent.verifier import GroundedReasoner, Verdict

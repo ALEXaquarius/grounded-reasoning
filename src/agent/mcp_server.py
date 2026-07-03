@@ -1,13 +1,13 @@
 """
-MCP server — phơi `verify_relation` thành một MCP tool để BẤT KỲ agent tương thích
-MCP (Claude, v.v.) dùng ngay: agent tự kiểm chứng suy luận quan hệ trước khi khẳng
-định, 0 token, có bằng chứng.
+MCP server — exposes `verify_relation` as an MCP tool so ANY MCP-compatible agent
+(Claude, etc.) can use it directly: the agent verifies a relational claim before
+asserting it, at 0 tokens, with a proof.
 
-Chạy (cần `pip install mcp`):
+Run (requires `pip install mcp`):
     python -m src.agent.mcp_server        # stdio server
 
-Import `mcp` được nạp LƯỜI trong build_server() nên module này import được kể cả khi
-chưa cài mcp (tests/CI không cần dependency).
+The `mcp` import is LAZY-loaded inside build_server() so this module still imports
+cleanly even without `mcp` installed (tests/CI don't need the dependency).
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from src.agent.tool import TOOL_SPEC, verify_relation
 
 
 def build_server():
-    """Dựng FastMCP server phơi tool verify_relation (nạp `mcp` lười)."""
+    """Build a FastMCP server exposing the verify_relation tool (lazy `mcp` import)."""
     from mcp.server.fastmcp import FastMCP
 
     server = FastMCP("grounded-reasoning")

@@ -1,20 +1,25 @@
 """
-Đại số HỢP THÀNH tổng quát — học bảng hợp thành của một monoid/nhóm từ ví dụ chuỗi,
-bằng closure (fixpoint). Trừu tượng hóa `learn_table_closure` của CLUTRR (DRY).
+General COMPOSITION algebra — learns the composition table of a monoid/group from
+chain examples, via closure (fixpoint). An abstraction of CLUTRR's
+`learn_table_closure` (DRY).
 
-Cho tập token R và phép hợp thành kết hợp comp: R×R → R. Quan sát = các chuỗi
-(t₁,…,t_k) kèm nhãn GOLD = hợp thành toàn chuỗi. Học comp bằng lan truyền:
-  • cặp trực tiếp (chuỗi độ dài 2) cho comp(t₁,t₂)=gold;
-  • chuỗi dài rút gọn bằng luật đã biết tới còn 2 phần tử ⟹ suy luật còn thiếu.
-Lặp tới bất động. Vì hợp thành KẾT HỢP, rút gọn ở bất kỳ vị trí đều hợp lệ.
+Given a token set R and an associative composition comp: R x R -> R. Observations
+are chains (t1,...,tk) labeled with GOLD = the composition of the whole chain.
+comp is learned by propagation:
+  - direct pairs (length-2 chains) give comp(t1,t2)=gold;
+  - longer chains reduced by already-known rules down to 2 elements infer the
+    missing rule.
+Iterate to a fixpoint. Because composition is ASSOCIATIVE, reducing at any
+position is valid.
 """
 from __future__ import annotations
 
 
 def fold(seq: tuple, table: dict) -> object | None:
     """
-    Rút gọn chuỗi bằng bảng hợp thành (CYK bất kỳ vị trí). None nếu thiếu luật
-    HOẶC chuỗi rỗng (không có phần tử identity ngầm định, không bịa kết quả).
+    Reduce a chain using the composition table (CYK-style, any position). Returns
+    None if a rule is missing OR the chain is empty (no implicit identity element —
+    never fabricate a result).
     """
     if not seq:
         return None
@@ -34,8 +39,9 @@ def fold(seq: tuple, table: dict) -> object | None:
 
 def learn_composition(chains: list[tuple[tuple, object]], max_iter: int = 1000):
     """
-    Học bảng comp[(a,b)]→c từ (chuỗi, gold) bằng fixpoint.
-    Trả về (table, conflicts, iters). conflicts>0 ⟹ dữ liệu KHÔNG kết hợp/nhất quán.
+    Learn the table comp[(a,b)] -> c from (chain, gold) pairs by fixpoint.
+    Returns (table, conflicts, iters). conflicts > 0 means the data is NOT
+    associative/consistent.
     """
     table: dict[tuple, object] = {}
     conflicts = 0
@@ -43,7 +49,7 @@ def learn_composition(chains: list[tuple[tuple, object]], max_iter: int = 1000):
         changed = False
         for seq, gold in chains:
             spans = list(seq)
-            # rút gọn tối đa bằng luật hiện có
+            # reduce as far as possible using the rules learned so far
             i = 0
             while len(spans) > 2 and i < len(spans) - 1:
                 key = (spans[i], spans[i + 1])

@@ -1,27 +1,32 @@
 """
-Abstract Fuzzy Inference — thuật toán SUY DIỄN TRỪU TƯỢNG trên đồ thị quan hệ.
+Abstract Fuzzy Inference — an ABSTRACT INFERENCE algorithm over a relation graph.
 
-Tái định hướng (từ retrieval → REASONING): ngôn ngữ/khái niệm là TRỪU TƯỢNG,
-không cần khớp chính xác, nhưng phải SUY DIỄN được quan hệ gián tiếp. Đây là năng
-lực mà:
-  - Embedding KHÔNG có (chỉ đo tương tự MỘT bước, không chuỗi).
-  - LLM có nhưng ẢO GIÁC (suy diễn ra quan hệ không tồn tại).
+Reframing (retrieval -> REASONING): language/concepts are ABSTRACT — exact
+matching is not required, but INDIRECT relations must be inferable. This is a
+capability that:
+  - Embeddings do NOT have (they measure ONE-hop similarity only, no chaining).
+  - LLMs have, but with HALLUCINATION (inferring relations that don't exist).
 
-Máy suy diễn này (dựa khuếch tán phổ — Định lý Multi-Hop Bridging) có 3 tính chất
-mà kiểm chứng số xác nhận (theorem_fuzzy_inference):
+This inference engine (based on spectral diffusion — the Multi-Hop Bridging
+theorem) has 3 properties confirmed by numerical verification
+(theorem_fuzzy_inference):
 
-  1. FUZZY CALIBRATED: niềm tin giảm ĐƠN ĐIỆU theo độ sâu suy diễn (α^k) —
-     suy xa hơn = kém chắc chắn hơn. Không cần "chính xác", mà cần ĐÚNG THỨ TỰ.
-  2. DEEP CHAINING: suy ra quan hệ N-bước (heart→pulse→…→cardiac) mà khớp
-     1-bước bó tay hoàn toàn.
-  3. GROUNDED (không ảo giác): CHỈ suy ra khi tồn tại đường đi thật; hai thành
-     phần rời → niềm tin = 0 (Định lý no-false-bridge). Suy diễn CÓ BẢO ĐẢM.
+  1. FUZZY CALIBRATED: confidence decreases MONOTONICALLY with inference depth
+     (alpha^k) — inferring farther means being less certain. It doesn't need to be
+     "exact," it needs the ORDERING to be correct.
+  2. DEEP CHAINING: infers N-hop relations (heart->pulse->...->cardiac) that
+     1-hop matching is completely blind to.
+  3. GROUNDED (no hallucination): infers a relation ONLY when a real path exists;
+     disconnected components -> confidence = 0 (the no-false-bridge theorem).
+     Inference is GUARANTEED.
 
-Niềm tin suy diễn: conf(a→b) = Σ_{k=1}^{K} α^k · (P^k)[a,b],  P = D⁻¹W
-(tổng có trọng số xác suất đi từ a đến b qua ≤ K bước; chuỗi dài bị chiết khấu α).
+Inference confidence: conf(a→b) = Sum_{k=1}^{K} alpha^k * (P^k)[a,b], P = D^-1 W
+(the weighted sum of probability of reaching b from a in <= K steps; longer
+chains are discounted by alpha).
 
-Khác retrieval: đây KHÔNG nhắm điểm nDCG, mà nhắm NĂNG LỰC SUY DIỄN có giải thích
-được (trả về đường đi) và không bịa — một trục khác hẳn, nơi toán học này mạnh.
+Unlike retrieval: this does NOT target nDCG, it targets EXPLAINABLE inference
+capability (returns the path) with no fabrication — a completely different axis,
+where this mathematics is strong.
 """
 
 from __future__ import annotations
@@ -29,12 +34,12 @@ from __future__ import annotations
 
 class FuzzyInferenceEngine:
     """
-    Đồ thị quan hệ có hướng + suy diễn bắc cầu mờ qua khuếch tán.
+    A directed relation graph + fuzzy transitive inference via diffusion.
 
     Parameters
     ----------
-    walk_len : độ sâu suy diễn tối đa K.
-    alpha    : chiết khấu mỗi bước ∈ (0,1) — chuỗi dài kém chắc chắn hơn.
+    walk_len : maximum inference depth K.
+    alpha    : per-step discount in (0,1) — longer chains are less certain.
     """
 
     def __init__(self, walk_len: int = 8, alpha: float = 0.6) -> None:
@@ -43,7 +48,7 @@ class FuzzyInferenceEngine:
         self._edges: dict[str, dict[str, float]] = {}
 
     def add_relation(self, a: str, b: str, weight: float = 1.0) -> None:
-        """Thêm quan hệ a → b (có hướng, trọng số)."""
+        """Add a directed, weighted relation a → b."""
         self._edges.setdefault(a, {})
         self._edges[a][b] = self._edges[a].get(b, 0.0) + weight
 
@@ -56,8 +61,8 @@ class FuzzyInferenceEngine:
 
     def infer(self, source: str) -> dict[str, float]:
         """
-        Suy diễn từ `source`: trả về {concept: niềm tin} cho mọi khái niệm suy ra
-        được (qua ≤ walk_len bước). Niềm tin giảm theo độ sâu.
+        Infer from `source`: returns {concept: confidence} for every concept that
+        can be inferred (within <= walk_len steps). Confidence decreases with depth.
         """
         adj = self._transition()
         x = {source: 1.0}
@@ -76,16 +81,17 @@ class FuzzyInferenceEngine:
         return out
 
     def confidence(self, a: str, b: str) -> float:
-        """Niềm tin suy diễn a → b (0 nếu không có đường đi)."""
+        """Inference confidence a → b (0 if no path exists)."""
         return self.infer(a).get(b, 0.0)
 
     def explain(self, a: str, b: str) -> list[str] | None:
         """
-        GIẢI THÍCH suy diễn: trả về đường đi ngắn nhất a → b (BFS) QUA ≥1 BƯỚC, hoặc
-        None nếu không suy ra được. Đây là tính GROUNDED — suy diễn có bằng chứng,
-        không bịa. KỂ CẢ khi a==b: chỉ grounded nếu có chu trình/self-loop THẬT quay
-        lại a (không coi self-identity là hiển nhiên qua "đường rỗng" 0-bước) — khớp
-        đúng Định lý Guard Soundness (explain(a,b)≠None ⟺ b reachable từ a).
+        EXPLAIN the inference: returns the shortest a → b path (BFS) via >=1 STEP,
+        or None if not inferable. This is the GROUNDED property — inference comes
+        with evidence, never fabricated. EVEN when a==b: only grounded if a real
+        cycle/self-loop actually returns to a (self-identity is NOT assumed via a
+        trivial "empty path" of 0 steps) — this exactly matches the Guard
+        Soundness theorem (explain(a,b) != None iff b is reachable from a).
         """
         prev: dict[str, str] = {}
         visited = {a}
@@ -111,14 +117,16 @@ class FuzzyInferenceEngine:
 
 class TypedInferenceEngine:
     """
-    Suy diễn HỢP THÀNH và LOẠI SUY trên đồ thị quan hệ CÓ KIỂU.
+    COMPOSITIONAL and ANALOGICAL inference over a TYPED relation graph.
 
-    - follow(src, [r1,r2,…]): đi theo CHUỖI quan hệ (compose) → grandparent =
-      parent∘parent, great-grandparent = parent∘parent∘parent.
-    - analogy(a, b, c): A:B::C:? — suy kiểu quan hệ từ (a,b) rồi áp lên c.
+    - follow(src, [r1,r2,...]): follows a CHAIN of relations (compose) ->
+      grandparent = parent o parent, great-grandparent = parent o parent o parent.
+    - analogy(a, b, c): A:B::C:? — infers the relation type from (a,b), then
+      applies it to c.
 
-    Đây là suy diễn TRỪU TƯỢNG: derive quan hệ MỚI (grandparent) từ quan hệ GỐC
-    (parent) bằng hợp thành — năng lực compositional mà tương tự vector không có.
+    This is ABSTRACT inference: NEW relations (grandparent) are derived from BASE
+    relations (parent) by composition — a compositional capability vector
+    similarity lacks.
     """
 
     def __init__(self) -> None:
@@ -128,7 +136,7 @@ class TypedInferenceEngine:
         self._e.setdefault((a, rel), set()).add(b)
 
     def follow(self, src: str, rels: list[str]) -> set[str]:
-        """Suy diễn hợp thành: đi theo chuỗi quan hệ."""
+        """Compositional inference: follows a chain of relations."""
         cur = {src}
         for r in rels:
             nxt: set[str] = set()
@@ -141,7 +149,7 @@ class TypedInferenceEngine:
         return [r for (x, r), ys in self._e.items() if x == a and b in ys]
 
     def analogy(self, a: str, b: str, c: str) -> set[str]:
-        """A:B::C:? — suy kiểu quan hệ (a→b) rồi áp lên c."""
+        """A:B::C:? — infers the relation type (a→b), then applies it to c."""
         out: set[str] = set()
         for r in self.relations_between(a, b):
             out |= self._e.get((c, r), set())
@@ -150,18 +158,19 @@ class TypedInferenceEngine:
 
 class HallucinationGuard:
     """
-    Bọc ngoài LLM để CHẶN ẢO GIÁC: LLM đề xuất quan hệ, máy suy diễn có bảo đảm
-    kiểm chứng bằng ĐƯỜNG ĐI. Chấp nhận claim ⟺ tồn tại đường đi grounded.
+    Wraps an LLM to BLOCK HALLUCINATION: the LLM proposes a relation, and the
+    guaranteed inference engine verifies it via a PATH. A claim is accepted iff a
+    grounded path exists.
 
-    Định lý Guard Soundness: trên đồ thị, explain(a,b)≠None ⟺ b reachable từ a
-    (BFS đúng). ⟹ Guard KHÔNG BAO GIỜ chấp nhận claim không có đường đi
-    (precision=1.0 trên fact bắc cầu) — LLM không thể "lừa" bằng ảo giác.
+    Guard Soundness theorem: on the graph, explain(a,b) != None iff b is reachable
+    from a (exact BFS). Hence the guard NEVER accepts a claim with no path
+    (precision=1.0 on transitive facts) — the LLM cannot "cheat" via hallucination.
     """
 
     def __init__(self, engine: FuzzyInferenceEngine) -> None:
         self.engine = engine
 
     def verify(self, a: str, b: str) -> tuple[bool, list[str] | None]:
-        """Trả về (chấp nhận?, đường đi bằng chứng | None)."""
+        """Returns (accepted?, proof path | None)."""
         path = self.engine.explain(a, b)
         return (path is not None, path)

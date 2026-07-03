@@ -1,17 +1,17 @@
 """
-Client LLM đa-provider (OpenAI-compatible) — CHỈ đọc key từ biến môi trường,
-KHÔNG BAO GIỜ hardcode key vào mã nguồn.
+A multi-provider (OpenAI-compatible) LLM client — ONLY reads the key from an
+environment variable, NEVER hardcodes a key in source.
 
-Hỗ trợ mọi endpoint OpenAI-compatible: DeepSeek, OpenAI, Groq, OpenRouter, Together,
-Mistral, Ollama (local)… — chỉ khác base_url + biến môi trường key + tên model. Nhờ
-đó tích hợp ĐƠN GIẢN: đổi provider mà không đổi mã.
+Supports any OpenAI-compatible endpoint: DeepSeek, OpenAI, Groq, OpenRouter,
+Together, Mistral, Ollama (local)... differing only in base_url + key env var +
+model name. This keeps integration SIMPLE: switch providers without changing code.
 
-    LLMClient()                         # mặc định DeepSeek
-    LLMClient(provider="groq")          # đọc GROQ_API_KEY
-    LLMClient(provider="ollama")        # local, không cần key
-    LLMClient(base_url=..., api_key_env="MY_KEY", model="...")   # tuỳ biến
+    LLMClient()                         # defaults to DeepSeek
+    LLMClient(provider="groq")          # reads GROQ_API_KEY
+    LLMClient(provider="ollama")        # local, no key needed
+    LLMClient(base_url=..., api_key_env="MY_KEY", model="...")   # custom
 
-`.ask(prompt)` → text.  `.chat(messages, tools=...)` → message dict (cho tool-calling).
+`.ask(prompt)` -> text.  `.chat(messages, tools=...)` -> a message dict (for tool-calling).
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import os
 import ssl
 import urllib.request
 
-# provider -> (base_url, biến-môi-trường-key, model-mặc-định, key-bắt-buộc)
+# provider -> (base_url, key-env-var, default-model, key-required)
 PROVIDERS: dict[str, tuple[str, str, str, bool]] = {
     "deepseek": ("https://api.deepseek.com/v1/chat/completions", "DEEPSEEK_API_KEY", "deepseek-chat", True),
     "openai": ("https://api.openai.com/v1/chat/completions", "OPENAI_API_KEY", "gpt-4o-mini", True),
@@ -33,7 +33,7 @@ PROVIDERS: dict[str, tuple[str, str, str, bool]] = {
 
 
 class LLMClient:
-    """Client OpenAI-compatible đa-provider (đọc key từ env)."""
+    """A multi-provider OpenAI-compatible client (key read from an env var)."""
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class LLMClient:
         timeout: float = 60.0,
     ) -> None:
         if provider not in PROVIDERS and not base_url:
-            raise ValueError(f"provider '{provider}' không rõ; cấp base_url + api_key_env.")
+            raise ValueError(f"unknown provider '{provider}'; supply base_url + api_key_env.")
         p_url, p_env, p_model, p_required = PROVIDERS.get(
             provider, (base_url, api_key_env or "", model or "", False)
         )
@@ -52,16 +52,16 @@ class LLMClient:
         self.model = model or p_model
         env = api_key_env or p_env
         self.key = os.environ.get(env, "") if env else ""
-        # base_url tuỳ biến ⟹ key tuỳ chọn (không ép theo preset).
+        # a custom base_url makes the key optional (not forced by the preset).
         required = p_required and not base_url
         if required and not self.key:
-            raise RuntimeError(f"Chưa đặt {env} trong môi trường (.env).")
+            raise RuntimeError(f"{env} is not set in the environment (.env).")
         self.timeout = timeout
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.n_calls = 0
 
-        # Tôn trọng proxy egress + CA bundle của môi trường (giống curl).
+        # Respect the environment's egress proxy + CA bundle (same as curl).
         cafile = (
             os.environ.get("SSL_CERT_FILE")
             or os.environ.get("REQUESTS_CA_BUNDLE")
@@ -82,10 +82,11 @@ class LLMClient:
         with self._opener.open(req, timeout=self.timeout) as r:
             data = json.loads(r.read().decode())
         if not data.get("choices"):
-            # API trả JSON hợp lệ nhưng không có completion nào (rate limit, content
-            # filter, lỗi provider…) — báo lỗi RÕ kèm response gốc, thay vì để
-            # data["choices"][0] ném IndexError/KeyError khó hiểu ở nơi gọi.
-            raise RuntimeError(f"API không trả về 'choices': {data}")
+            # The API returned valid JSON but no completion (rate limiting, content
+            # filtering, a provider error...) — fail LOUDLY with the raw response,
+            # instead of letting data["choices"][0] raise a confusing
+            # IndexError/KeyError at the call site.
+            raise RuntimeError(f"API response has no 'choices': {data}")
         usage = data.get("usage", {})
         self.total_prompt_tokens += usage.get("prompt_tokens", 0)
         self.total_completion_tokens += usage.get("completion_tokens", 0)
@@ -102,7 +103,7 @@ class LLMClient:
 
     def chat(self, messages: list[dict], tools: list | None = None,
              temperature: float = 0.0) -> dict:
-        """Một lượt chat (hỗ trợ tool-calling). Trả về message dict của assistant."""
+        """A single chat turn (supports tool-calling). Returns the assistant's message dict."""
         payload = {"model": self.model, "messages": messages, "temperature": temperature}
         if tools:
             payload["tools"] = tools
@@ -115,7 +116,7 @@ class LLMClient:
 
 
 class DeepSeekClient(LLMClient):
-    """Tương thích ngược: LLMClient chốt provider DeepSeek."""
+    """Backward-compatible alias: LLMClient pinned to the DeepSeek provider."""
 
     def __init__(self, model: str = "deepseek-chat", timeout: float = 60.0) -> None:
         super().__init__(provider="deepseek", model=model, timeout=timeout)

@@ -1,22 +1,25 @@
 """
-Suy diễn Horn (forward-chaining) — TỔNG QUÁT HÓA guard bắc cầu sang logic đầy đủ.
+Horn inference (forward-chaining) — GENERALIZES the transitive-closure guard to
+full Horn logic.
 
-Guard hợp thành quan hệ (Định lý G) = trường hợp riêng của Horn với MỘT luật
-edge(a,b)∧edge(b,c)→edge(a,c). Forward-chaining tính MÔ HÌNH NHỎ NHẤT (least model)
-của chương trình Horn: sound (mọi fact suy ra đều có chứng minh) + complete (mọi
-fact suy được đều suy ra) + dừng. Đây là bộ kiểm chứng 0-token cho suy diễn LLM ở
-dạng luật tổng quát (∧ trong thân) — mở đường tới ProofWriter/EntailmentBank.
+The relational composition guard (Theorem G) is the special case of Horn logic
+with a SINGLE rule edge(a,b) AND edge(b,c) -> edge(a,c). Forward-chaining computes
+the LEAST MODEL of a Horn program: sound (every derived fact has a proof) +
+complete (every derivable fact is derived) + terminating. This is a 0-token
+verifier for LLM inference expressed as general rules (conjunctive bodies) — a
+path toward ProofWriter/EntailmentBank-style tasks.
 
-Trung thực: đây là ngữ nghĩa Datalog cổ điển (không mới), giá trị = đóng gói thành
-lớp kiểm chứng có bảo đảm cho đầu ra LLM, thống nhất với đại số toán tử.
+Honestly: this is classical Datalog semantics (not new); the value is packaging
+it as a guaranteed verification layer for LLM output, unified with the operator
+algebra.
 """
 from __future__ import annotations
 
-Rule = tuple[frozenset, object]  # (thân: tập literal, đầu: literal)
+Rule = tuple[frozenset, object]  # (body: a set of literals, head: a literal)
 
 
 def forward_chain(facts: set, rules: list[Rule]) -> set:
-    """Mô hình nhỏ nhất: đóng kín facts dưới rules tới bất động (O(#luật · vòng))."""
+    """Least model: close `facts` under `rules` to a fixpoint (O(#rules * rounds))."""
     derived = set(facts)
     changed = True
     while changed:
@@ -29,14 +32,15 @@ def forward_chain(facts: set, rules: list[Rule]) -> set:
 
 
 def entails(facts: set, rules: list[Rule], goal) -> bool:
-    """Goal có suy ra được không (goal ∈ least model)."""
+    """Whether goal is derivable (goal is in the least model)."""
     return goal in forward_chain(facts, rules)
 
 
 def explain(facts: set, rules: list[Rule], goal) -> list[Rule] | None:
     """
-    Chứng minh grounded cho goal: dãy luật kích hoạt dẫn tới goal (hoặc None).
-    Đây là tính GROUNDED — guard chấp nhận claim ⟺ có chứng minh.
+    A grounded proof of goal: the sequence of rules that fired en route to goal
+    (or None). This is the GROUNDED property — the guard accepts a claim iff a
+    proof exists.
     """
     derived = set(facts)
     proof: list[Rule] = []

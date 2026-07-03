@@ -1,21 +1,23 @@
 """
-Đại số TOÁN TỬ cho quan hệ — nền tảng tuyến tính của suy diễn hợp thành & loại suy.
+The OPERATOR algebra for relations — the linear-algebra foundation of
+compositional inference & analogy.
 
-Nối suy diễn tập-hợp (TypedInferenceEngine) với lý thuyết toán tử của dự án
-("Retrieval là toán tử tuyến tính trên không gian khái niệm"). Mỗi quan hệ r trở
-thành một TOÁN TỬ boolean R_r trên ℝ^n (khái niệm = vector cơ sở e_i):
+Connects set-based inference (TypedInferenceEngine) to the project's operator
+theory ("relational inference is a linear operator on a concept space"). Each
+relation r becomes a boolean OPERATOR R_r on R^n (concepts = basis vectors e_i):
 
-    R_r[i, j] = 1  ⟺  (concept_j) --r--> (concept_i)
+    R_r[i, j] = 1  iff  (concept_j) --r--> (concept_i)
 
-Khi đó suy diễn trở thành ĐẠI SỐ TUYẾN TÍNH chính xác:
+Inference then becomes exact LINEAR ALGEBRA:
 
-  • HỢP THÀNH  r∘s  →  tích toán tử  R_r · R_s   (định lý G: đúng khớp với follow)
-  • NGHỊCH ĐẢO r⁻¹  →  chuyển vị     R_rᵀ        (suy diễn ngược)
-  • BẮC CẦU (đóng kín) r*  →  Σ_k R_r^k        (mọi số bước)
-  • LOẠI SUY A:B::C:?  →  áp toán tử suy từ (A→B) lên C
+  - COMPOSITION  r o s  ->  operator product  R_r . R_s   (Theorem G: matches follow exactly)
+  - INVERSE  r^-1  ->  transpose     R_r^T        (backward inference)
+  - TRANSITIVE CLOSURE  r*  ->  Sum_k R_r^k        (any number of steps)
+  - ANALOGY  A:B::C:?  ->  apply the operator inferred from (A->B) to C
 
-Đây là suy diễn TRỪU TƯỢNG có nền tảng đại số: quan hệ MỚI (grandparent, ancestor)
-sinh ra từ quan hệ GỐC bằng phép toán trên toán tử — không học, không embedding.
+This is ABSTRACT inference with an algebraic foundation: NEW relations
+(grandparent, ancestor) are generated from BASE relations purely by operations on
+operators — no learning, no embeddings.
 """
 from __future__ import annotations
 
@@ -23,12 +25,12 @@ import numpy as np
 
 
 class OperatorRelationAlgebra:
-    """Đồ thị quan hệ có kiểu, biểu diễn mỗi quan hệ bằng một toán tử boolean."""
+    """A typed relation graph, representing each relation as a boolean operator."""
 
     def __init__(self) -> None:
         self._idx: dict[str, int] = {}
         self._names: list[str] = []
-        # quan hệ -> danh sách cạnh (a, b) chờ dựng ma trận (lazy)
+        # relation -> list of (a, b) edges, pending (lazy) matrix construction
         self._rel_edges: dict[str, list[tuple[str, str]]] = {}
         self._ops: dict[str, np.ndarray] | None = None
 
@@ -36,7 +38,7 @@ class OperatorRelationAlgebra:
         if c not in self._idx:
             self._idx[c] = len(self._names)
             self._names.append(c)
-            self._ops = None  # kích thước đổi → dựng lại
+            self._ops = None  # dimension changed -> rebuild
         return self._idx[c]
 
     def add(self, a: str, rel: str, b: str) -> None:
@@ -45,7 +47,7 @@ class OperatorRelationAlgebra:
         self._rel_edges.setdefault(rel, []).append((a, b))
         self._ops = None
 
-    # -- dựng toán tử ------------------------------------------------------
+    # -- building the operators ---------------------------------------------
     def _build(self) -> dict[str, np.ndarray]:
         if self._ops is not None:
             return self._ops
@@ -54,18 +56,18 @@ class OperatorRelationAlgebra:
         for rel, edges in self._rel_edges.items():
             M = np.zeros((n, n), dtype=bool)
             for a, b in edges:
-                M[self._idx[b], self._idx[a]] = True  # cột a → hàng b
+                M[self._idx[b], self._idx[a]] = True  # column a -> row b
             ops[rel] = M
         self._ops = ops
         return ops
 
     def operator(self, rel: str) -> np.ndarray:
-        """Toán tử boolean R_rel (n×n)."""
+        """The boolean operator R_rel (n x n)."""
         return self._build()[rel]
 
     def _onehot(self, c: str) -> np.ndarray:
         v = np.zeros(len(self._names), dtype=bool)
-        if c in self._idx:  # khái niệm chưa từng xuất hiện → vector không
+        if c in self._idx:  # a concept never seen before -> the zero vector
             v[self._idx[c]] = True
         return v
 
@@ -74,12 +76,12 @@ class OperatorRelationAlgebra:
 
     @staticmethod
     def _apply(M: np.ndarray, v: np.ndarray) -> np.ndarray:
-        """Nhân boolean ma trận-vector: (M v)_i = OR_j M_ij ∧ v_j."""
+        """Boolean matrix-vector product: (M v)_i = OR_j M_ij AND v_j."""
         return (M & v[None, :]).any(axis=1)
 
-    # -- suy diễn ----------------------------------------------------------
+    # -- inference ------------------------------------------------------------
     def follow(self, src: str, rels: list[str]) -> set[str]:
-        """Hợp thành bằng TÍCH TOÁN TỬ: áp R_{r1}, R_{r2}, … lên e_src."""
+        """Composition via the OPERATOR PRODUCT: apply R_{r1}, R_{r2}, ... to e_src."""
         ops = self._build()
         v = self._onehot(src)
         for r in rels:
@@ -89,16 +91,16 @@ class OperatorRelationAlgebra:
         return self._support(v)
 
     def inverse_follow(self, src: str, rel: str) -> set[str]:
-        """Suy diễn NGƯỢC qua chuyển vị: {a : a --rel--> src} = support(R_relᵀ e_src)."""
+        """Backward inference via the transpose: {a : a --rel--> src} = support(R_rel^T e_src)."""
         ops = self._build()
         if rel not in ops:
             return set()
         return self._support(self._apply(ops[rel].T, self._onehot(src)))
 
     def closure(self, src: str, rel: str, max_steps: int | None = None) -> set[str]:
-        """ĐÓNG KÍN bắc cầu r* : mọi khái niệm tới được qua ≥1 bước quan hệ rel."""
+        """TRANSITIVE closure r*: every concept reachable via >=1 rel-step."""
         ops = self._build()
-        if rel not in ops or src not in self._idx:  # quan hệ/khái niệm chưa biết → rỗng
+        if rel not in ops or src not in self._idx:  # unknown relation/concept -> empty
             return set()
         M = ops[rel]
         n = len(self._names)
@@ -121,7 +123,7 @@ class OperatorRelationAlgebra:
         return [r for r, M in ops.items() if M[ib, ia]]
 
     def analogy(self, a: str, b: str, c: str) -> set[str]:
-        """A:B::C:? — áp mọi toán tử quan hệ nối (a→b) lên c."""
+        """A:B::C:? — apply every relation operator connecting (a→b) to c."""
         ops = self._build()
         out: set[str] = set()
         for r in self.relations_between(a, b):

@@ -75,7 +75,7 @@ class TestKatzDivergenceRegression:
 
     def test_divergent_regime_raises(self):
         B = np.array([[0.0, 2.0], [2.0, 0.0]])  # rho=2
-        with pytest.raises(ValueError, match="phân kỳ"):
+        with pytest.raises(ValueError, match="diverges"):
             katz_resolvent(B, 0.6)               # alpha*rho=1.2 ≥ 1
 
     def test_boundary_alpha_rho_equals_one_raises(self):

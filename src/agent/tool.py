@@ -1,12 +1,14 @@
 """
-Tool cho AGENT (function-calling) — kiểm chứng claim quan hệ TRƯỚC khi khẳng định.
+A tool for AGENTS (function-calling) — verifies a relational claim BEFORE it is
+asserted.
 
-Stateless & JSON-friendly: agent truyền `facts` + claim, nhận verdict + đường đi bằng
-chứng. Bắt ảo giác quan hệ nhiều bước với 0 token LLM, precision đảm bảo (Định lý G).
+Stateless & JSON-friendly: the agent passes `facts` + a claim, and gets back a
+verdict + proof path. Catches multi-hop relational hallucination at 0 LLM tokens,
+with a precision guarantee (Theorem G).
 
-Dùng với Anthropic/OpenAI function-calling:
-    tools=[TOOL_SPEC]; ... khi model gọi tool → run_tool(tool_input)
-Hoặc gọi trực tiếp: verify_relation(facts, subject, relation, object).
+Use with Anthropic/OpenAI function-calling:
+    tools=[TOOL_SPEC]; ... when the model calls the tool -> run_tool(tool_input)
+Or call directly: verify_relation(facts, subject, relation, object).
 """
 from __future__ import annotations
 
@@ -48,7 +50,7 @@ TOOL_SPEC = {
 
 
 def openai_tool_spec() -> dict:
-    """TOOL_SPEC ở định dạng OpenAI/DeepSeek/Groq (function-calling)."""
+    """TOOL_SPEC in OpenAI/DeepSeek/Groq (function-calling) format."""
     return {
         "type": "function",
         "function": {
@@ -61,11 +63,11 @@ def openai_tool_spec() -> dict:
 
 def verify_relation(facts, subject: str, relation: str, object: str) -> dict:  # noqa: A002
     """
-    Kiểm chứng `subject --relation*--> object` từ `facts`. Trả dict JSON:
+    Verify `subject --relation*--> object` from `facts`. Returns a JSON dict:
     {grounded, proof, confidence, relation}.
 
-    Khoan dung với đầu vào LLM: BỎ QUA fact không đúng dạng [s, r, o] (thay vì làm
-    treo agent), và báo số fact bị bỏ ở khóa `skipped_facts`.
+    Tolerant of LLM input: SKIPS any fact not shaped like [s, r, o] (instead of
+    crashing the agent), and reports the number skipped under `skipped_facts`.
     """
     gr = GroundedReasoner()
     clean, skipped = [], 0
@@ -82,7 +84,7 @@ def verify_relation(facts, subject: str, relation: str, object: str) -> dict:  #
 
 
 def run_tool(tool_input: dict) -> dict:
-    """Bộ điều phối cho function-calling: nhận input JSON của tool → verdict dict."""
+    """Dispatcher for function-calling: takes the tool's JSON input, returns a verdict dict."""
     return verify_relation(
         tool_input["facts"],
         tool_input["subject"],

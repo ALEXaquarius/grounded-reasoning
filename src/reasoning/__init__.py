@@ -1,4 +1,4 @@
-"""Suy diễn trừu tượng: fuzzy diffusion, typed compositional, đại số toán tử."""
+"""Abstract inference: fuzzy diffusion, typed compositional, operator algebra."""
 from src.reasoning.abstract_inference import (
     FuzzyInferenceEngine,
     HallucinationGuard,

@@ -45,7 +45,7 @@ def _client_with_mock_response(payload_or_bytes):
 
 class TestUnknownProviderEmptyBaseUrlRegression:
     def test_exact_fuzz_repro_empty_string_base_url(self):
-        with pytest.raises(ValueError, match="không rõ"):
+        with pytest.raises(ValueError, match="unknown provider"):
             LLMClient(provider="unknown_xyz", base_url="")
 
     def test_none_base_url_still_raises(self):
