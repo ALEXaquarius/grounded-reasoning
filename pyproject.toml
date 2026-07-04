@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grounded-reasoning"
-version = "0.1.2"
+dynamic = ["version"]
 description = "Zero-token, precision-guaranteed verifier for LLM/agent multi-hop relational reasoning"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,26 +17,29 @@ Repository = "https://github.com/ALEXaquarius/grounded-reasoning"
 Paper = "https://github.com/ALEXaquarius/grounded-reasoning/blob/main/PAPER.md"
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.0"]            # MCP server (src.agent.mcp_server)
+mcp = ["mcp>=1.0"]            # MCP server (grounded_reasoning.agent.mcp_server)
 dev = ["pytest>=8", "pytest-cov>=6", "ruff>=0.6"]
 
 [project.scripts]
-grounded-reasoning-mcp = "src.agent.mcp_server:main"
+grounded-reasoning-mcp = "grounded_reasoning.agent.mcp_server:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 
+[tool.setuptools.dynamic]
+version = { attr = "grounded_reasoning._version.__version__" }
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["grounded_reasoning*", "src*"]
+include = ["grounded_reasoning*"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 
-# The published library (grounded_reasoning, src/agent, src/reasoning, src/theory)
-# is held to strict lint rules; research/experiment scripts use a looser style.
+# The published library (grounded_reasoning.agent, .reasoning, .theory) is held
+# to strict lint rules; research/experiment scripts use a looser style.
 [tool.ruff.lint.per-file-ignores]
-"src/experiments/*" = ["E702", "E741", "E731", "E402", "F841"]
+"grounded_reasoning/experiments/*" = ["E702", "E741", "E731", "E402", "F841"]
 "tests/*" = ["E741", "F841", "E702"]

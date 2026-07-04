@@ -81,7 +81,7 @@ LLMClient(base_url="...", api_key_env="MY_KEY", model="...")   # tuỳ biến
 ```
 
 **Demo function-calling thật** (agent tự kiểm chứng, chặn ảo giác):
-`python -m src.experiments.agent_demo` (hoặc `LLM_PROVIDER=groq python -m ...`).
+`python -m grounded_reasoning.experiments.agent_demo` (hoặc `LLM_PROVIDER=groq python -m ...`).
 
 **Đa ngôn ngữ:** entity/relation là chuỗi Unicode opaque ⟹ chạy với MỌI ngôn ngữ
 không cần cấu hình — `("Anh","cha","Bảo")`, `("父","是","祖父")`, `("أب","والد","جد")`
@@ -93,7 +93,7 @@ không cần cấu hình — `("Anh","cha","Bảo")`, `("父","是","祖父")`, 
 
 ```bash
 pip install "grounded-reasoning[mcp]"
-grounded-reasoning-mcp                    # stdio MCP server (hoặc: python -m src.agent.mcp_server)
+grounded-reasoning-mcp                    # stdio MCP server (hoặc: python -m grounded_reasoning.agent.mcp_server)
 ```
 
 Server phơi đúng một tool `verify_relation`. Cấu hình client MCP trỏ tới lệnh trên;
@@ -130,7 +130,7 @@ grounded = [c for c, v in gr.filter_claims(llm_claims) if v.grounded]
 ```
 
 **Khi đồ thị NHIỄU** (ví dụ atomic facts do LLM trích từ văn bản thô), dùng
-`ConformalReasoner` (`src.reasoning.conformal_reasoning`) để có bảo đảm PHỦ
+`ConformalReasoner` (`grounded_reasoning.reasoning.conformal_reasoning`) để có bảo đảm PHỦ
 phân-phối-tự-do ≥ 1−α thay cho precision cứng — xem `PAPER.md` §7.1 (tiếng Anh).
 
 ---

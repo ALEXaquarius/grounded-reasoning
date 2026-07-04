@@ -1,7 +1,7 @@
 """
 Tests for the AGENT integration layer (GroundedReasoner + verify_relation tool). Offline.
 """
-from src.agent import (
+from grounded_reasoning.agent import (
     GroundedReasoner,
     TOOL_SPEC,
     openai_tool_spec,

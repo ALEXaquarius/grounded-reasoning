@@ -13,7 +13,7 @@ Key point: a hard guard needs a CLEAN graph; here the graph comes from the LLM
 (noisy) yet conformal prediction still gives a distribution-free coverage guarantee.
 Ground truth is used ONLY for scoring, never fed into the extraction step.
 
-Run: DEEPSEEK_API_KEY=... python -m src.experiments.conformal_llm_eval
+Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.conformal_llm_eval
 """
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ import json
 import random
 import re
 
-from src.reasoning.abstract_inference import FuzzyInferenceEngine
-from src.reasoning.conformal_reasoning import conformal_threshold
+from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
+from grounded_reasoning.reasoning.conformal_reasoning import conformal_threshold
 
 WORDS = [
     "wug", "blicket", "dax", "fep", "kiki", "bouba", "toma", "pilk", "glim",
@@ -121,7 +121,7 @@ def extract_edges(client, text, words):
 
 def run(n_onto: int = 15, alpha: float = 0.1, model: str = "deepseek-chat",
         seed: int = 0, hard: bool = False, verbose: bool = True):
-    from src.reasoning.llm_client import DeepSeekClient
+    from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
     client = DeepSeekClient(model=model)
     rng = random.Random(seed)

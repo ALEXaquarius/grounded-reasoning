@@ -1,11 +1,11 @@
 """
 Tests for the abstract inference algorithm (FuzzyInferenceEngine) + Theorem F.
 """
-from src.reasoning.abstract_inference import (
+from grounded_reasoning.reasoning.abstract_inference import (
     FuzzyInferenceEngine, TypedInferenceEngine, HallucinationGuard,
 )
-from src.experiments.inference_eval import evaluate
-from src.theory.theorems import theorem_fuzzy_inference
+from grounded_reasoning.experiments.inference_eval import evaluate
+from grounded_reasoning.theory.theorems import theorem_fuzzy_inference
 
 
 def _chain_engine():

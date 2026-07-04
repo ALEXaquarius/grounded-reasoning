@@ -17,5 +17,5 @@ opening a public issue. We aim to acknowledge reports within a few days.
 ## Scope
 
 The core verifier runs locally with no network access and no model tokens. The
-optional experiment scripts under `src/experiments/` call external LLM APIs only
+optional experiment scripts under `grounded_reasoning/experiments/` call external LLM APIs only
 when you provide a key; they are not required to use the library.

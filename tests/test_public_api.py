@@ -1,6 +1,8 @@
 """
 Test for the `grounded_reasoning` PUBLIC API — ensures clean imports for external users.
 """
+import importlib.metadata
+
 import grounded_reasoning as grx
 
 
@@ -9,7 +11,10 @@ def test_public_exports_present():
                  "TOOL_SPEC", "openai_tool_spec", "ConformalReasoner",
                  "conformal_threshold", "LLMClient"):
         assert hasattr(grx, name), name
-    assert grx.__version__ == "0.1.2"
+    # __version__ must match what the installed distribution's metadata reports —
+    # catches drift between grounded_reasoning/_version.py and pyproject.toml's
+    # dynamic version wiring, without pinning a literal that needs bumping here too.
+    assert grx.__version__ == importlib.metadata.version("grounded-reasoning")
 
 
 def test_public_facade_works():

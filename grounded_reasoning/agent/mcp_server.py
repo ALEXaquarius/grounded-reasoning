@@ -4,14 +4,14 @@ MCP server — exposes `verify_relation` as an MCP tool so ANY MCP-compatible ag
 asserting it, at 0 tokens, with a proof.
 
 Run (requires `pip install mcp`):
-    python -m src.agent.mcp_server        # stdio server
+    python -m grounded_reasoning.agent.mcp_server        # stdio server
 
 The `mcp` import is LAZY-loaded inside build_server() so this module still imports
 cleanly even without `mcp` installed (tests/CI don't need the dependency).
 """
 from __future__ import annotations
 
-from src.agent.tool import TOOL_SPEC, verify_relation
+from grounded_reasoning.agent.tool import TOOL_SPEC, verify_relation
 
 
 def build_server():

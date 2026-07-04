@@ -12,13 +12,13 @@ hops), how do three different behaviors compare on (i) deep-inference coverage a
   C. GUESSER  — simulates an "overconfident hallucinating LLM": guesses that any
      pair close in index is related. High coverage but many hallucinations.
 
-Run: python -m src.experiments.inference_eval
+Run: python -m grounded_reasoning.experiments.inference_eval
 """
 from __future__ import annotations
 
 import random
 
-from src.reasoning.abstract_inference import FuzzyInferenceEngine
+from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 
 
 def build_chain_world(n_concepts: int = 120, seed: int = 0):

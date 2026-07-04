@@ -11,7 +11,7 @@ Protocol:
 Measures: (i) how much the LLM hallucinates on its own; (ii) how many hallucinations
 the guard catches while NOT dropping any correct answer (precision must = 1.0 by Theorem G).
 
-Run: DEEPSEEK_API_KEY=... python -m src.experiments.guard_llm_eval
+Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.guard_llm_eval
 (reads the key from .env/environment variable; never hardcode it).
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ import json
 import random
 import re
 
-from src.reasoning.operator_algebra import OperatorRelationAlgebra
+from grounded_reasoning.reasoning.operator_algebra import OperatorRelationAlgebra
 
 
 def build_family(seed: int = 0):
@@ -84,7 +84,7 @@ def parse_names(text: str, universe: set[str]) -> set[str]:
 
 
 def run(seed: int = 0, model: str = "deepseek-chat", verbose: bool = True):
-    from src.reasoning.llm_client import DeepSeekClient
+    from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
     facts, alg, names = build_family(seed)
     universe = set(names)

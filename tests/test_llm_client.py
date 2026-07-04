@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from src.reasoning.llm_client import PROVIDERS, LLMClient
+from grounded_reasoning.reasoning.llm_client import PROVIDERS, LLMClient
 
 
 class TestLLMClient:
@@ -49,7 +49,7 @@ class _FakeClient:
 
 
 def test_agent_demo_tool_loop_offline():
-    from src.experiments.agent_demo import ask_agent
+    from grounded_reasoning.experiments.agent_demo import ask_agent
 
     out = ask_agent(_FakeClient(), "Is Ann an ancestor of Dan?", verbose=False)
     assert "grounded" in out.lower()

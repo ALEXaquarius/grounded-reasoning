@@ -4,12 +4,12 @@ algebra is a precision=1.0 filter: it catches EVERY hallucination and NEVER drop
 a correct answer.
 
 The corresponding LIVE experiment (DeepSeek) lives in
-src/experiments/guard_llm_eval.py — measuring on a real LLM confirms the same
+grounded_reasoning/experiments/guard_llm_eval.py — measuring on a real LLM confirms the same
 property (Theorem G). This test makes no network calls.
 """
 import random
 
-from src.experiments.guard_llm_eval import _grounded, build_family, make_queries
+from grounded_reasoning.experiments.guard_llm_eval import _grounded, build_family, make_queries
 
 
 def _mock_llm_answer(truth: set[str], universe: set[str], rng: random.Random) -> set[str]:
@@ -44,7 +44,7 @@ def test_guard_is_perfect_precision_filter():
 
 def test_guard_uses_zero_llm_tokens():
     """The guard is local algebra: it makes NO LLM calls ⟹ +0 tokens (no added cost)."""
-    from src.experiments.nl_ontology_eval import build_dense_dag
+    from grounded_reasoning.experiments.nl_ontology_eval import build_dense_dag
 
     class CallCountingClient:
         def __init__(self):
@@ -70,8 +70,8 @@ def test_guard_uses_zero_llm_tokens():
 def test_dense_dag_is_acyclic_and_guard_perfect_on_overclaim():
     """Dense abstract DAG: nilpotent (Theorem H) + the guard catches LLM over-claiming."""
 
-    from src.experiments.nl_ontology_eval import build_dense_dag
-    from src.reasoning.relation_spectrum import is_acyclic, spectral_radius
+    from grounded_reasoning.experiments.nl_ontology_eval import build_dense_dag
+    from grounded_reasoning.reasoning.relation_spectrum import is_acyclic, spectral_radius
 
     alg, words, edges = build_dense_dag(seed=3)
     A = alg.operator("relates to").astype(float).T

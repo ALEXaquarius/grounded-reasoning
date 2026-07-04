@@ -2,7 +2,7 @@
 OFFLINE test for the CLUTRR composition solver (path_relations + solve) — no network calls.
 Uses a manual composition table + fake rows to lock down the fold LOGIC (Theorem G on data).
 """
-from src.experiments.clutrr_eval import (
+from grounded_reasoning.experiments.clutrr_eval import (
     clean_chain,
     learn_table_closure,
     path_relations,

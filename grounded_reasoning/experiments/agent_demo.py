@@ -7,15 +7,15 @@ tool (backed by GroundedReasoner) and is required to call it before asserting an
 ⟹ grounded claims are confirmed, hallucinated ones are rejected.
 
 Multi-provider (OpenAI-compatible): DeepSeek/OpenAI/Groq/OpenRouter/Together/Mistral/Ollama.
-    python -m src.experiments.agent_demo                    # DeepSeek (default)
-    LLM_PROVIDER=groq python -m src.experiments.agent_demo  # other provider
+    python -m grounded_reasoning.experiments.agent_demo                    # DeepSeek (default)
+    LLM_PROVIDER=groq python -m grounded_reasoning.experiments.agent_demo  # other provider
 """
 from __future__ import annotations
 
 import json
 import os
 
-from src.agent import GroundedReasoner
+from grounded_reasoning.agent import GroundedReasoner
 
 # KB: 1-hop kinship chain (the agent "knows" this); there is NO path Ann→Frank.
 FACTS = [
@@ -87,7 +87,7 @@ def ask_agent(client, question: str, max_turns: int = 5, verbose: bool = True) -
 
 
 def run(provider: str | None = None, verbose: bool = True):
-    from src.reasoning.llm_client import LLMClient
+    from grounded_reasoning.reasoning.llm_client import LLMClient
 
     provider = provider or os.environ.get("LLM_PROVIDER", "deepseek")
     client = LLMClient(provider=provider)

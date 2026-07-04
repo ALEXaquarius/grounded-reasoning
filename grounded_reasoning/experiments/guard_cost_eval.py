@@ -10,18 +10,18 @@ Two ways to fix LLM hallucinations, compared on the SAME inference output:
 
 Question: does using the guard INCREASE token cost? Measure total_tokens for both.
 
-Run: DEEPSEEK_API_KEY=... python -m src.experiments.guard_cost_eval
+Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.guard_cost_eval
 """
 from __future__ import annotations
 
 import json
 import time
 
-from src.experiments.nl_ontology_eval import build_dense_dag, parse
+from grounded_reasoning.experiments.nl_ontology_eval import build_dense_dag, parse
 
 
 def run(seed: int = 3, top_k: int = 6, model: str = "deepseek-chat", verbose: bool = True):
-    from src.reasoning.llm_client import DeepSeekClient
+    from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
     alg, words, edges = build_dense_dag(seed)
     universe = set(words)

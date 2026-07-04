@@ -27,7 +27,7 @@ subject from the very start, so it cannot be used as the stopping condition.
 import random
 
 from grounded_reasoning import GroundedReasoner
-from src.reasoning.abstract_inference import FuzzyInferenceEngine, HallucinationGuard
+from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine, HallucinationGuard
 
 
 class TestSelfCycleRegression:

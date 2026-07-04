@@ -3,7 +3,7 @@ Tests for the relation operator SPECTRUM (relation_spectrum) — Theorem H.
 """
 import numpy as np
 
-from src.reasoning.relation_spectrum import (
+from grounded_reasoning.reasoning.relation_spectrum import (
     cycle_members,
     diffusion_sum,
     is_acyclic,

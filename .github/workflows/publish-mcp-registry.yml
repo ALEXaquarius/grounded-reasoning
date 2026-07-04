@@ -15,9 +15,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install mcp-publisher
+      - name: Check server.json version matches the package version
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          PKG_VERSION=$(python3 -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('grounded_reasoning/_version.py').read()).group(1))")
+          SERVER_VERSION=$(python3 -c "import json; print(json.load(open('server.json'))['version'])")
+          PACKAGE_ENTRY_VERSION=$(python3 -c "import json; print(json.load(open('server.json'))['packages'][0]['version'])")
+          echo "grounded_reasoning/_version.py: $PKG_VERSION"
+          echo "server.json .version:           $SERVER_VERSION"
+          echo "server.json .packages[0].version: $PACKAGE_ENTRY_VERSION"
+          if [ "$PKG_VERSION" != "$SERVER_VERSION" ] || [ "$PKG_VERSION" != "$PACKAGE_ENTRY_VERSION" ]; then
+            echo "::error::server.json version(s) do not match grounded_reasoning/_version.py ($PKG_VERSION)."
+            echo "::error::Bump server.json's \"version\" and \"packages[0].version\" to $PKG_VERSION before releasing."
+            exit 1
+          fi
+
+      - name: Install mcp-publisher
+        env:
+          # Pinned, not `releases/latest` — this job has id-token: write (OIDC);
+          # an unpinned upstream release could silently change what runs here.
+          # Bump deliberately: https://github.com/modelcontextprotocol/registry/releases
+          MCP_PUBLISHER_VERSION: v1.7.9
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Authenticate to MCP Registry (GitHub OIDC)
         run: ./mcp-publisher login github-oidc

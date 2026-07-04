@@ -5,9 +5,9 @@ EVEN WHEN the graph is noisy". No network calls.
 """
 import random
 
-from src.experiments.conformal_llm_eval import build_ontology
-from src.reasoning.abstract_inference import FuzzyInferenceEngine
-from src.reasoning.conformal_reasoning import conformal_threshold
+from grounded_reasoning.experiments.conformal_llm_eval import build_ontology
+from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
+from grounded_reasoning.reasoning.conformal_reasoning import conformal_threshold
 
 
 def _coverage_under_drop(p_drop: float, alpha: float, seeds=range(12)) -> float:

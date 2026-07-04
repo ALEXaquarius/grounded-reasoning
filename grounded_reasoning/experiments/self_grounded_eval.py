@@ -17,15 +17,15 @@ is needed (removes a core limitation).
 Survival condition (falsifiable): atomic-fact precision must exceed multi-hop precision.
 If atomic facts also hallucinate heavily ⟹ SGDC is useless (recorded honestly).
 
-Run: DEEPSEEK_API_KEY=... python -m src.experiments.self_grounded_eval
+Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.self_grounded_eval
 """
 from __future__ import annotations
 
 import json
 import re
 
-from src.reasoning.operator_algebra import OperatorRelationAlgebra
-from src.reasoning.relation_spectrum import is_acyclic, spectral_radius
+from grounded_reasoning.reasoning.operator_algebra import OperatorRelationAlgebra
+from grounded_reasoning.reasoning.relation_spectrum import is_acyclic, spectral_radius
 
 # The REAL closed world (ground truth for SCORING; never used to filter prompts).
 GROUND = [
@@ -68,7 +68,7 @@ def _parse_pairs(text, universe):
 
 
 def run(model: str = "deepseek-chat", verbose: bool = True):
-    from src.reasoning.llm_client import DeepSeekClient
+    from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
     truth = _truth_alg()
     universe = _universe()

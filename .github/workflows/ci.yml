@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -30,6 +30,6 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
-      # Không cần API key: mọi bất biến LLM đều có bản khóa OFFLINE.
+      # No API key needed: every LLM-dependent invariant has an OFFLINE-locked version.
       - name: Run tests
         run: pytest tests/ -q

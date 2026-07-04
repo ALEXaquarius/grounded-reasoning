@@ -83,7 +83,7 @@ LLMClient(base_url="...", api_key_env="MY_KEY", model="...")   # custom
 ```
 
 **Real function-calling demo** (the agent verifies itself, blocks hallucination):
-`python -m src.experiments.agent_demo` (or `LLM_PROVIDER=groq python -m ...`).
+`python -m grounded_reasoning.experiments.agent_demo` (or `LLM_PROVIDER=groq python -m ...`).
 
 **Multilingual:** entities/relations are opaque Unicode strings ⟹ works in ANY
 language with zero configuration — `("Anh","cha","Bảo")`, `("父","是","祖父")`,
@@ -95,7 +95,7 @@ language with zero configuration — `("Anh","cha","Bảo")`, `("父","是","祖
 
 ```bash
 pip install "grounded-reasoning[mcp]"
-grounded-reasoning-mcp                    # stdio MCP server (or: python -m src.agent.mcp_server)
+grounded-reasoning-mcp                    # stdio MCP server (or: python -m grounded_reasoning.agent.mcp_server)
 ```
 
 The server exposes exactly one tool, `verify_relation`. Point your MCP client
@@ -133,7 +133,7 @@ grounded = [c for c, v in gr.filter_claims(llm_claims) if v.grounded]
 ```
 
 **When the graph is NOISY** (e.g. atomic facts extracted by an LLM from raw text), use
-`ConformalReasoner` (`src.reasoning.conformal_reasoning`) for a distribution-free
+`ConformalReasoner` (`grounded_reasoning.reasoning.conformal_reasoning`) for a distribution-free
 **coverage** guarantee ≥ 1−α instead of hard precision — see `PAPER.md` §7.1.
 
 ---

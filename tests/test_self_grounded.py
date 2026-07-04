@@ -4,8 +4,8 @@ contradiction certificate. No network calls — locks down the algebraic LOGIC; 
 LLM-side measurement lives in the experiment.
 """
 
-from src.reasoning.operator_algebra import OperatorRelationAlgebra
-from src.reasoning.relation_spectrum import cycle_members, is_acyclic, spectral_radius
+from grounded_reasoning.reasoning.operator_algebra import OperatorRelationAlgebra
+from grounded_reasoning.reasoning.relation_spectrum import cycle_members, is_acyclic, spectral_radius
 
 
 def _alg(pairs):

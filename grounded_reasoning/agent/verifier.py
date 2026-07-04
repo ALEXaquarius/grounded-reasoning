@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.reasoning.abstract_inference import FuzzyInferenceEngine
-from src.reasoning.operator_algebra import OperatorRelationAlgebra
+from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
+from grounded_reasoning.reasoning.operator_algebra import OperatorRelationAlgebra
 
 
 @dataclass
@@ -57,6 +57,7 @@ class GroundedReasoner:
         self._eng = FuzzyInferenceEngine(walk_len=walk_len, alpha=alpha)
         self._typed: dict[str, dict[str, set[str]]] = {}  # rel -> a -> {b}
         self._relations: set[str] = set()
+        self._infer_cache: dict[str, dict[str, float]] = {}  # source -> {target: confidence}
 
     # -- building the graph ---------------------------------------------------
     def add_fact(self, subject: str, relation: str, obj: str) -> None:
@@ -65,6 +66,13 @@ class GroundedReasoner:
         self._eng.add_relation(subject, obj)                 # the any-relation graph
         self._typed.setdefault(relation, {}).setdefault(subject, set()).add(obj)
         self._relations.add(relation)
+        self._infer_cache.clear()  # the graph changed; any cached diffusion is stale
+
+    def _confidence(self, subject: str, obj: str) -> float:
+        """Cached diffusion confidence subject -> obj (recomputed once per source per graph state)."""
+        if subject not in self._infer_cache:
+            self._infer_cache[subject] = self._eng.infer(subject)
+        return self._infer_cache[subject].get(obj, 0.0)
 
     def add_facts(self, triples) -> None:
         for i, t in enumerate(triples):
@@ -86,12 +94,12 @@ class GroundedReasoner:
         """
         if via is None:
             path = self._eng.explain(subject, obj)
-            conf = self._eng.confidence(subject, obj)
+            conf = self._confidence(subject, obj)
             return Verdict(path is not None, path, conf, None)
         # BFS on the per-relation graph: O(V+E), avoiding a dense matrix (scales to large graphs).
         path = self._path_via(subject, obj, via)
         reachable = path is not None
-        conf = self._eng.confidence(subject, obj) if reachable else 0.0
+        conf = self._confidence(subject, obj) if reachable else 0.0
         return Verdict(reachable, path, conf, via)
 
     def filter_claims(self, claims) -> list[tuple[tuple, Verdict]]:

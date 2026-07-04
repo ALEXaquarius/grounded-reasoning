@@ -15,7 +15,7 @@ HONEST protocol (comparable numbers, no fabricated world):
 The composition table = EXTERNAL knowledge (kinship rules) ⟹ this is a GUARD
 (Theorem G), NOT self-grounded SGDC. Noted explicitly to avoid confusion.
 
-Run: DEEPSEEK_API_KEY=... python -m src.experiments.clutrr_eval
+Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.clutrr_eval
 """
 from __future__ import annotations
 
@@ -230,7 +230,7 @@ def run(train_n: int = 5000, per_hop: int = 10, hops=range(2, 9),
     import random
     import re
 
-    from src.reasoning.llm_client import DeepSeekClient
+    from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
     train = load_split("train", train_n)
     table = learn_table_closure(train)  # closure ⟹ 100% coverage at every hop

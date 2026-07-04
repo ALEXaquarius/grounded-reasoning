@@ -22,8 +22,8 @@ return a baseless threshold.
 """
 import pytest
 
-from src.reasoning.composition_algebra import fold, learn_composition
-from src.reasoning.conformal_reasoning import ConformalReasoner, conformal_threshold
+from grounded_reasoning.reasoning.composition_algebra import fold, learn_composition
+from grounded_reasoning.reasoning.conformal_reasoning import ConformalReasoner, conformal_threshold
 
 
 class TestCompositionEmptySequenceRegression:

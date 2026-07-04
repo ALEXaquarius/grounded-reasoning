@@ -17,7 +17,7 @@ pytest tests/          # no API key needed — every LLM-dependent invariant is 
 ## Ground rules
 
 1. **Every new capability needs a theorem + numerical verification** in
-   `src/theory/theorems.py`, added to `ALL_THEOREMS`, with a corresponding test in
+   `grounded_reasoning/theory/theorems.py`, added to `ALL_THEOREMS`, with a corresponding test in
    `tests/test_theorems.py`.
 2. **No secrets in the repo.** API keys are read from environment variables only
    (`.env` is git-ignored). Never hardcode a key or commit one. See

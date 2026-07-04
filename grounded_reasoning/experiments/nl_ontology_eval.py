@@ -12,15 +12,15 @@ truth and the guard = the transitive closure of OperatorRelationAlgebra (Theorem
 All relations are ACYCLIC ⟹ the operator is NILPOTENT (Theorem H) ⟹ the closure
 terminates in finitely many steps.
 
-Run: DEEPSEEK_API_KEY=... python -m src.experiments.nl_ontology_eval
+Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.nl_ontology_eval
 """
 from __future__ import annotations
 
 import json
 import re
 
-from src.reasoning.operator_algebra import OperatorRelationAlgebra
-from src.reasoning.relation_spectrum import is_acyclic, spectral_radius
+from grounded_reasoning.reasoning.operator_algebra import OperatorRelationAlgebra
+from grounded_reasoning.reasoning.relation_spectrum import is_acyclic, spectral_radius
 
 # A MORE CLOSED & HARDER world: long chains (4-6 hops) + anti-commonsense TRAPS
 # (facts that hold in this closed world but CONTRADICT real-world knowledge, to
@@ -140,7 +140,7 @@ def build_dense_dag(seed: int = 3, n: int = 22):
 
 def run_dense(seed: int = 3, top_k: int = 8, model: str = "deepseek-chat", verbose: bool = True):
     """HARD scenario: transitive closure over a dense DAG of abstract concepts."""
-    from src.reasoning.llm_client import DeepSeekClient
+    from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
     alg, words, edges = build_dense_dag(seed)
     A = alg.operator("relates to").astype(float).T
@@ -189,7 +189,7 @@ def run_dense(seed: int = 3, top_k: int = 8, model: str = "deepseek-chat", verbo
 
 
 def run(model: str = "deepseek-chat", verbose: bool = True):
-    from src.reasoning.llm_client import DeepSeekClient
+    from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
     alg, concepts = build()
     universe = set(concepts)

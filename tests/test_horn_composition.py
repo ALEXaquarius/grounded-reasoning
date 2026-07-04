@@ -1,8 +1,8 @@
 """
 Tests for Horn inference (forward-chaining) + the generic composition algebra.
 """
-from src.reasoning.composition_algebra import fold, learn_composition
-from src.reasoning.horn import entails, explain, forward_chain
+from grounded_reasoning.reasoning.composition_algebra import fold, learn_composition
+from grounded_reasoning.reasoning.horn import entails, explain, forward_chain
 
 
 class TestHorn:

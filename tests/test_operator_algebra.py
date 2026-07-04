@@ -1,7 +1,7 @@
 """
 Tests for the OPERATOR algebra of relations (OperatorRelationAlgebra).
 """
-from src.reasoning.operator_algebra import OperatorRelationAlgebra
+from grounded_reasoning.reasoning.operator_algebra import OperatorRelationAlgebra
 
 
 def _kin():

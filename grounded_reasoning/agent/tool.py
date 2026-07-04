@@ -12,7 +12,7 @@ Or call directly: verify_relation(facts, subject, relation, object).
 """
 from __future__ import annotations
 
-from src.agent.verifier import GroundedReasoner
+from grounded_reasoning.agent.verifier import GroundedReasoner
 
 TOOL_SPEC = {
     "name": "verify_relation",

@@ -35,7 +35,7 @@ def theorem_fuzzy_inference(seed: int = 0) -> dict:
     reachability.
     """
     import random
-    from src.reasoning.abstract_inference import FuzzyInferenceEngine
+    from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 
     rng = random.Random(seed)
     eng = FuzzyInferenceEngine(walk_len=8, alpha=0.6)
@@ -112,7 +112,7 @@ def theorem_operator_compositional_equivalence(seed: int = 0) -> dict:
     against BFS / set-based ground truth.
     """
     import random
-    from src.reasoning.operator_algebra import OperatorRelationAlgebra
+    from grounded_reasoning.reasoning.operator_algebra import OperatorRelationAlgebra
 
     rng = random.Random(seed)
     alg = OperatorRelationAlgebra()
@@ -207,8 +207,8 @@ def theorem_relation_spectrum(seed: int = 0) -> dict:
     """
     import numpy as np
 
-    from src.reasoning.abstract_inference import FuzzyInferenceEngine
-    from src.reasoning.relation_spectrum import (
+    from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
+    from grounded_reasoning.reasoning.relation_spectrum import (
         cycle_members,
         diffusion_sum,
         is_acyclic,
@@ -423,7 +423,7 @@ def theorem_closure_completeness(seed: int = 0) -> dict:
     """
     import random
 
-    from src.reasoning.composition_algebra import fold, learn_composition
+    from grounded_reasoning.reasoning.composition_algebra import fold, learn_composition
 
     n = 6
     elems = [(r, s) for s in (0, 1) for r in range(n)]
@@ -517,8 +517,8 @@ def theorem_conformal_reasoning(seed: int = 0) -> dict:
     """
     import random
 
-    from src.reasoning.abstract_inference import FuzzyInferenceEngine
-    from src.reasoning.conformal_reasoning import conformal_threshold
+    from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
+    from grounded_reasoning.reasoning.conformal_reasoning import conformal_threshold
 
     def build(sd, p_drop, p_add, n=45):
         rng = random.Random(sd)
@@ -621,7 +621,7 @@ def theorem_horn_least_model(seed: int = 0) -> dict:
     """
     import random
 
-    from src.reasoning.horn import forward_chain
+    from grounded_reasoning.reasoning.horn import forward_chain
 
     rng = random.Random(seed)
     closed_ok = supported_ok = True

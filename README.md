@@ -47,7 +47,7 @@ acc
 ```
 
 *(CLUTRR/v1 gen_train234_test2to10, clean-chain, n=12/hop; full test set n=635: solver
-covers 99.5%, accuracy 99.2%. `src/experiments/clutrr_eval.py`.)*
+covers 99.5%, accuracy 99.2%. `grounded_reasoning/experiments/clutrr_eval.py`.)*
 
 ---
 
@@ -90,7 +90,7 @@ The reasoning core rests on a single unification (numerically verified, zero err
 | Relation operator algebra | **G** | composition = operator product, transitive closure = Σ powers |
 | Spectral analysis (Katz) | **H** | `engine.infer` = resolvent (I−αP)⁻¹−I (matches **0.0** error) |
 
-⟹ fuzzy inference **is** spectral analysis of the relation operator. `src/reasoning/`.
+⟹ fuzzy inference **is** spectral analysis of the relation operator. `grounded_reasoning/reasoning/`.
 
 Four further theorems extend this core: **I** (two-sided precision/recall guarantee
 for a self-grounded, no-external-KB variant), **J** (closure-learning completeness,
@@ -134,7 +134,7 @@ that extracted graph (ground truth is used only for scoring):
 > *Validity always holds; efficiency scales with graph quality.*
 
 ⟹ A path to guaranteed reasoning over **natural-language relations** — where the hard
-guard can't reach. `src/experiments/conformal_llm_eval.py`.
+guard can't reach. `grounded_reasoning/experiments/conformal_llm_eval.py`.
 
 ---
 
@@ -153,15 +153,15 @@ python -c "from grounded_reasoning import GroundedReasoner as G; r=G(); r.add_fa
 
 # Real-LLM experiments (need a key — read from an env var, NEVER hardcoded):
 export DEEPSEEK_API_KEY=sk-...        # bring your own; .env is gitignored
-python -m src.experiments.guard_llm_eval        # hallucination guard
-python -m src.experiments.self_grounded_eval    # SGDC
-python -m src.experiments.clutrr_eval           # public CLUTRR benchmark
-python -m src.experiments.conformal_llm_eval    # end-to-end conformal (LLM-extracted graph)
+python -m grounded_reasoning.experiments.guard_llm_eval        # hallucination guard
+python -m grounded_reasoning.experiments.self_grounded_eval    # SGDC
+python -m grounded_reasoning.experiments.clutrr_eval           # public CLUTRR benchmark
+python -m grounded_reasoning.experiments.conformal_llm_eval    # end-to-end conformal (LLM-extracted graph)
 ```
 
 ---
 
-## Integrating with an Agent / LLM (`src/agent/`)
+## Integrating with an Agent / LLM (`grounded_reasoning/agent/`)
 
 A **relation-reasoning verifier** for agents: check a multi-hop claim **before
 asserting it** — zero model tokens, precision guaranteed (accepts iff a grounded proof
@@ -178,7 +178,7 @@ gr.verify("alice","zed",   via="parent")   # Verdict(grounded=False, proof=None)
 Three integration paths (details: [docs/integration.md](docs/integration.md)):
 - **Library**: `GroundedReasoner.verify / filter_claims / contradictions`.
 - **Function-calling**: `TOOL_SPEC` (Anthropic) / `openai_tool_spec()` (OpenAI) + `run_tool` — a stateless `verify_relation` tool.
-- **MCP server**: `python -m src.agent.mcp_server` — plugs into Claude or any MCP-compatible agent.
+- **MCP server**: `python -m grounded_reasoning.agent.mcp_server` — plugs into Claude or any MCP-compatible agent.
 
 **Multi-provider** (not just DeepSeek): `LLMClient(provider=...)` for DeepSeek / OpenAI /
 Groq / OpenRouter / Together / Mistral / Ollama (local) — all OpenAI-compatible, switch
@@ -186,7 +186,7 @@ providers without changing code. **Multilingual**: entities/relations are opaque
 Unicode strings ⟹ works with any language (`cha`, `父`, `والد`…) with zero configuration.
 
 A real function-calling demo (agent verifies itself, blocks hallucination):
-`python -m src.experiments.agent_demo`. When the graph is **noisy** (relations
+`python -m grounded_reasoning.experiments.agent_demo`. When the graph is **noisy** (relations
 extracted by an LLM from text), use `ConformalReasoner` for a **coverage ≥1−α**
 guarantee instead of hard precision.
 
@@ -197,16 +197,16 @@ guarantee instead of hard precision.
 | Path | Content |
 |------|---------|
 | `grounded_reasoning/` | Public package — `GroundedReasoner`, `verify_relation`, `TOOL_SPEC`, `ConformalReasoner`, `LLMClient` |
-| `src/agent/{verifier,tool,mcp_server}.py` | Public API implementation — HallucinationGuard, function-calling tool, MCP server |
-| `src/reasoning/abstract_inference.py` | FuzzyInferenceEngine, TypedInferenceEngine, HallucinationGuard (Theorem F) |
-| `src/reasoning/operator_algebra.py` | Relation operator algebra (Theorem G) |
-| `src/reasoning/relation_spectrum.py` | Spectrum, nilpotency, Katz resolvent (Theorem H) |
-| `src/reasoning/conformal_reasoning.py` | Conformal — coverage guarantee under noise (Theorem K) |
-| `src/reasoning/composition_algebra.py` | Composition-table learning, validated on CLUTRR (Theorem J) |
-| `src/reasoning/horn.py` | Horn forward-chaining, least-model semantics (Theorem L) |
-| `src/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
-| `src/theory/theorems.py` | **Seven theorems (F–L)** with numerical verification |
-| `src/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/agent/{verifier,tool,mcp_server}.py` | Public API implementation — HallucinationGuard, function-calling tool, MCP server |
+| `grounded_reasoning/reasoning/abstract_inference.py` | FuzzyInferenceEngine, TypedInferenceEngine, HallucinationGuard (Theorem F) |
+| `grounded_reasoning/reasoning/operator_algebra.py` | Relation operator algebra (Theorem G) |
+| `grounded_reasoning/reasoning/relation_spectrum.py` | Spectrum, nilpotency, Katz resolvent (Theorem H) |
+| `grounded_reasoning/reasoning/conformal_reasoning.py` | Conformal — coverage guarantee under noise (Theorem K) |
+| `grounded_reasoning/reasoning/composition_algebra.py` | Composition-table learning, validated on CLUTRR (Theorem J) |
+| `grounded_reasoning/reasoning/horn.py` | Horn forward-chaining, least-model semantics (Theorem L) |
+| `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
+| `grounded_reasoning/theory/theorems.py` | **Seven theorems (F–L)** with numerical verification |
+| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo |
 | `examples/quickstart.ipynb` | Runnable tour of the library (offline, Colab-ready) |
 
