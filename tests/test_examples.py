@@ -28,7 +28,7 @@ def test_deep_chain_and_reverse_trap():
     gr = GroundedReasoner()
     gr.add_facts(_demo.FACTS)
     # 9-hop deep chain
-    assert gr.verify("Tùng", "Vũ", via="quản lý").proof == _demo.CHAIN
+    assert gr.verify("Grant", "Wells", via="manages").proof == _demo.CHAIN
     # reversed direction ⟹ not grounded (a spot where LLMs tend to fabricate)
-    assert not gr.verify("Toàn", "Thành", via="quản lý").grounded
-    assert not gr.verify("Kho K9", "Tùng", via="sở hữu").grounded
+    assert not gr.verify("Kerr", "Hale", via="manages").grounded
+    assert not gr.verify("Warehouse K9", "Grant", via="owns").grounded

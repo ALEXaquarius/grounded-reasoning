@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Demo: does an LLM FABRICATE answers on multi-hop relational inference, and how
 does the grounded system compare?
@@ -12,13 +11,16 @@ where LLMs tend to fabricate), then compare against the grounded system
 Typical result: the LLM gets the forward chain right but FABRICATES on the
 reversed-direction questions; the grounded system scores 10/10.
 
-Note: the test passage, names, and questions below are intentionally kept in
-Vietnamese. This is the exact scenario that produced the "10/10 vs. fabricates
-2/10" result cited in the README/PAPER — translating it would change what the
-LLM is actually asked and invalidate that reproducible result. It also doubles
-as a demonstration of the library's multilingual design: entities/relations are
-opaque Unicode strings, so the grounded verifier works identically regardless
-of language.
+The graph topology and the reversed-direction trap are unchanged from the
+scenario that produced the "10/10 vs. fabricates 2/10" result cited in the
+README/PAPER; only the surface language changed (that scenario originally ran
+in Vietnamese). Composition/reachability logic is language-agnostic by
+construction — entities and relations are opaque Unicode strings (see
+tests/test_agent.py::TestMultilingual) — but an LLM's tendency to fabricate on
+a specific prompt is not guaranteed to be identical across languages, so the
+exact percentage should be re-measured against this English text before
+re-citing it; only the qualitative pattern (correct on the forward chain,
+fabricates on the reversed-direction questions) is expected to carry over.
 
 Run:  DEEPSEEK_API_KEY=... python examples/hallucination_demo.py
       (or LLM_PROVIDER=groq/openai/... — see grounded_reasoning.LLMClient)
@@ -31,75 +33,48 @@ import time
 from grounded_reasoning import GroundedReasoner, LLMClient
 
 # --- The world (ground truth, used for scoring) ---
-CHAIN = ["Tùng", "Trung", "Tuấn", "Tân", "Thành", "Thắng", "Thịnh", "Toàn", "Tú", "Vũ"]
-OWN = ["Tùng", "Sao Mai", "Việt Long", "Đông Đô", "Ba Vì", "Kho K9"]
+CHAIN = ["Grant", "Owens", "Reid", "Foster", "Hale", "Brooks", "Doyle", "Kerr", "Vance", "Wells"]
+OWN = ["Grant", "Meridian Group", "Solvex Corp", "Eastview Branch", "Baxter Plant", "Warehouse K9"]
 FACTS = (
-    [(CHAIN[i], "quản lý", CHAIN[i + 1]) for i in range(len(CHAIN) - 1)]   # "quản lý" = manages
-    + [(OWN[i], "sở hữu", OWN[i + 1]) for i in range(len(OWN) - 1)]        # "sở hữu" = owns
+    [(CHAIN[i], "manages", CHAIN[i + 1]) for i in range(len(CHAIN) - 1)]
+    + [(OWN[i], "owns", OWN[i + 1]) for i in range(len(OWN) - 1)]
 )
 
 PASSAGE = """
-Ở tập đoàn Sao Mai, sơ đồ quyền lực khá rắc rối và nhiều người kể lại sai. Anh Thịnh là
-cấp trên trực tiếp của anh Toàn. Trước đó, ông Tùng — chủ tịch — chỉ trực tiếp quản lý
-một người duy nhất là anh Trung. Anh Tân thì nằm dưới quyền anh Tuấn. Người quản lý anh
-Vũ (nhân viên trẻ nhất) chính là anh Tú. Anh Thành lại là cấp trên trực tiếp của anh
-Thắng, trong khi anh Thắng quản lý anh Thịnh. Đừng quên: anh Trung là người quản lý trực
-tiếp anh Tuấn, còn anh Toàn là cấp trên trực tiếp của anh Tú. Mắt xích còn lại: anh Tân
-quản lý anh Thành. Như vậy toàn bộ tạo thành một dây chuyền dài từ chủ tịch xuống tận
-nhân viên tuyến cuối, dù ở đây các mắt xích được kể lộn xộn.
+At Meridian Group, the chain of command is fairly tangled, and people often get it
+wrong when retelling it. Doyle is Kerr's direct manager. Before that, Grant — the
+chairman — directly manages only one person: Owens. Foster is under Reid's
+authority. The manager of Wells (the youngest employee) is Vance. Hale, in turn, is
+Brooks's direct manager, while Brooks manages Doyle. Don't forget: Owens directly
+manages Reid, and Kerr is Vance's direct manager. The remaining link: Foster manages
+Hale. Altogether this forms one long chain from the chairman down to the most
+junior employee — though the links are told out of order here.
 
-Về tài sản thì tách bạch: ông Tùng sở hữu tập đoàn Sao Mai. Tập đoàn Sao Mai sở hữu công
-ty Việt Long. Công ty Việt Long sở hữu chi nhánh Đông Đô. Chi nhánh Đông Đô sở hữu xưởng
-Ba Vì, và xưởng Ba Vì sở hữu kho hàng mang mã Kho K9. Nhiều đối thủ cố tình đồn thổi
-đảo ngược các quan hệ này để gây nhiễu thông tin.
+Ownership is a separate matter: Grant owns Meridian Group. Meridian Group owns
+Solvex Corp. Solvex Corp owns the Eastview branch. The Eastview branch owns the
+Baxter plant, and the Baxter plant owns the warehouse coded Warehouse K9. Several
+rivals deliberately spread rumors reversing these relationships to cause confusion.
 """.strip()
 
-# English gloss of PASSAGE, for readers who don't speak Vietnamese (not fed to the LLM —
-# see module docstring for why the prompt itself must stay in the original language):
-#
-#   At the Sao Mai corporation, the chain of command is fairly tangled and people often
-#   get it wrong when retelling it. Mr. Thịnh is Mr. Toàn's direct manager. Before that,
-#   Mr. Tùng — the chairman — directly manages only one person: Mr. Trung. Mr. Tân is
-#   under Mr. Tuấn's authority. The manager of Mr. Vũ (the youngest employee) is Mr. Tú.
-#   Mr. Thành is Mr. Thắng's direct manager, while Mr. Thắng manages Mr. Thịnh. Don't
-#   forget: Mr. Trung directly manages Mr. Tuấn, and Mr. Toàn is Mr. Tú's direct manager.
-#   The remaining link: Mr. Tân manages Mr. Thành. Together this forms one long chain
-#   from the chairman down to the most junior employee — told here out of order.
-#
-#   Ownership is a separate matter: Mr. Tùng owns the Sao Mai corporation. Sao Mai owns
-#   Việt Long company. Việt Long owns the Đông Đô branch. Đông Đô owns the Ba Vì
-#   workshop, and Ba Vì owns the warehouse coded Kho K9. Several rivals deliberately
-#   spread rumors reversing these relationships to cause confusion.
-
-# (subject, object, via, question text (Vietnamese, see module docstring), correct answer)
+# (subject, object, via, question text, correct answer)
 QUESTIONS = [
-    # "Does Mr. Tùng manage (indirectly) Mr. Vũ?" -> yes (forward, full 9-hop chain)
-    ("Tùng", "Vũ", "quản lý", "Ông Tùng có quản lý (gián tiếp) anh Vũ không?", True),
-    # "Does Mr. Thành manage (indirectly) Mr. Vũ?" -> yes (forward)
-    ("Thành", "Vũ", "quản lý", "Anh Thành có quản lý (gián tiếp) anh Vũ không?", True),
-    # "Does Mr. Vũ manage (indirectly) Mr. Tùng?" -> no (reversed direction — fabrication trap)
-    ("Vũ", "Tùng", "quản lý", "Anh Vũ có quản lý (gián tiếp) ông Tùng không?", False),
-    # "Does Mr. Toàn manage (indirectly) Mr. Thành?" -> no (reversed direction)
-    ("Toàn", "Thành", "quản lý", "Anh Toàn có quản lý (gián tiếp) anh Thành không?", False),
-    # "Does Mr. Tú manage (indirectly) Mr. Thắng?" -> no (reversed direction)
-    ("Tú", "Thắng", "quản lý", "Anh Tú có quản lý (gián tiếp) anh Thắng không?", False),
-    # "Does Mr. Trung manage (indirectly) Mr. Toàn?" -> yes (forward)
-    ("Trung", "Toàn", "quản lý", "Anh Trung có quản lý (gián tiếp) anh Toàn không?", True),
-    # "Does Mr. Tùng own (indirectly) Kho K9?" -> yes (forward, full 5-hop ownership chain)
-    ("Tùng", "Kho K9", "sở hữu", "Ông Tùng có sở hữu (gián tiếp) Kho K9 không?", True),
-    # "Does Kho K9 own (indirectly) Mr. Tùng?" -> no (reversed direction)
-    ("Kho K9", "Tùng", "sở hữu", "Kho K9 có sở hữu (gián tiếp) ông Tùng không?", False),
+    ("Grant", "Wells", "manages", "Does Grant manage Wells (indirectly)?", True),
+    ("Hale", "Wells", "manages", "Does Hale manage Wells (indirectly)?", True),
+    # reversed direction — fabrication trap
+    ("Wells", "Grant", "manages", "Does Wells manage Grant (indirectly)?", False),
+    ("Kerr", "Hale", "manages", "Does Kerr manage Hale (indirectly)?", False),
+    ("Vance", "Brooks", "manages", "Does Vance manage Brooks (indirectly)?", False),
+    ("Owens", "Kerr", "manages", "Does Owens manage Kerr (indirectly)?", True),
+    ("Grant", "Warehouse K9", "owns", "Does Grant own Warehouse K9 (indirectly)?", True),
+    ("Warehouse K9", "Grant", "owns", "Does Warehouse K9 own Grant (indirectly)?", False),
 ]
 
 
 def _ask(client: LLMClient, question: str, tries: int = 6) -> tuple[bool, str]:
-    # Prompt is in Vietnamese to match PASSAGE/QUESTIONS (see module docstring for why).
-    # It instructs the model: "read the passage carefully, answer the first line with
-    # exactly one word: CÓ (yes) or KHÔNG (no), then give a short explanation."
     prompt = (
-        f"Đọc kỹ đoạn văn sau và CHỈ dựa vào nó:\n\n{PASSAGE}\n\n"
-        f"Câu hỏi: {question}\n"
-        "Trả lời DÒNG ĐẦU đúng một từ: CÓ hoặc KHÔNG. Rồi giải thích ngắn."
+        f"Read the passage below carefully and rely ONLY on it:\n\n{PASSAGE}\n\n"
+        f"Question: {question}\n"
+        "Answer the FIRST LINE with exactly one word: YES or NO. Then give a short explanation."
     )
     for i in range(tries):
         try:
@@ -110,7 +85,7 @@ def _ask(client: LLMClient, question: str, tries: int = 6) -> tuple[bool, str]:
                 raise
             time.sleep(2 ** i)
     first = ans.strip().split("\n")[0].upper()
-    yes = ("CÓ" in first or "CO" in first) and "KHÔNG" not in first and "KHONG" not in first
+    yes = "YES" in first and "NO" not in first
     return yes, first[:46]
 
 
