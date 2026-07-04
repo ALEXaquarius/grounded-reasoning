@@ -109,6 +109,7 @@ phát biểu, chứng minh, và kiểm chứng số đầy đủ trong [PAPER.md
 | Guard chống ảo giác (quan hệ họ hàng) | precision **33% → 100%**, bắt được 94/94, 0 từ chối nhầm |
 | Chi phí token của guard | **+0 token** (so với LLM tự kiểm: +110% token, 34% precision) |
 | SGDC (self-grounded, không KB ngoài) | precision **78% → 100%** chỉ từ tính nhất quán nội tại |
+| Ontology dày đặc, phản trực giác | precision **31% → 100%**, bắt được 106/106, 0 từ chối nhầm — [`nl_ontology_eval.run_dense`](grounded_reasoning/experiments/nl_ontology_eval.py) |
 | CLUTRR (benchmark công khai) | solver **~100% ở mọi hop** so với DeepSeek 83%→8% |
 | Đoạn văn khó (chuỗi 9 bước, 8 câu hỏi) | DeepSeek **bịa 1/8** (sai hướng); hệ grounded **8/8**, có chứng minh — [`examples/hallucination_demo.py`](examples/hallucination_demo.py) |
 

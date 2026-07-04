@@ -108,6 +108,7 @@ seven are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
 | Hallucination guard (kinship) | precision **33% → 100%**, catches 94/94, 0 false rejects |
 | Guard token cost | **+0 tokens** (vs. LLM self-verify: +110% tokens, 34% precision) |
 | SGDC (self-grounded, no external KB) | precision **78% → 100%** from internal consistency alone |
+| Dense, anti-commonsense ontology | precision **31% → 100%**, catches 106/106, 0 false rejects — [`nl_ontology_eval.run_dense`](grounded_reasoning/experiments/nl_ontology_eval.py) |
 | CLUTRR (public benchmark) | solver **~100% at every hop** vs. DeepSeek 83%→8% |
 | Hard passage (9-step chain, 8 questions) | DeepSeek **fabricates 1/8** (wrong direction); grounded system **8/8**, with proofs — [`examples/hallucination_demo.py`](examples/hallucination_demo.py) |
 

@@ -260,6 +260,18 @@ from TRAIN only, so it is technically external knowledge (this is the guard,
 Theorem G, not the self-grounded variant of §6). Locked offline
 (`tests/test_clutrr_solver.py`).
 
+The residual ~0.8% is not a reachability failure — coverage (whether the
+learned table produces an answer at all) is separate from, and higher than,
+accuracy (whether that answer matches the test set's label), and the theorem
+below only guarantees the former. A fresh reproduction this session (n=10/hop,
+a different sample than the n=12/hop table above) surfaced a concrete instance:
+full 10/10 coverage at hop 3 but only 9/10 label matches. CLUTRR's relation
+labels are English kinship terms with real semantic overlap (e.g. in-law vs.
+blood relations can share a label in some story templates); a table learned
+from TRAIN can compose to a technically-reachable but differently-labeled
+answer. This is a property of learning from natural-language-labeled data, not
+a counterexample to Theorem J, which is stated over coverage.
+
 ---
 
 ## 5. Positioning, novelty, and limitations (honestly)
