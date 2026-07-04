@@ -54,15 +54,40 @@ Ba Vì, và xưởng Ba Vì sở hữu kho hàng mang mã Kho K9. Nhiều đối
 đảo ngược các quan hệ này để gây nhiễu thông tin.
 """.strip()
 
+# English gloss of PASSAGE, for readers who don't speak Vietnamese (not fed to the LLM —
+# see module docstring for why the prompt itself must stay in the original language):
+#
+#   At the Sao Mai corporation, the chain of command is fairly tangled and people often
+#   get it wrong when retelling it. Mr. Thịnh is Mr. Toàn's direct manager. Before that,
+#   Mr. Tùng — the chairman — directly manages only one person: Mr. Trung. Mr. Tân is
+#   under Mr. Tuấn's authority. The manager of Mr. Vũ (the youngest employee) is Mr. Tú.
+#   Mr. Thành is Mr. Thắng's direct manager, while Mr. Thắng manages Mr. Thịnh. Don't
+#   forget: Mr. Trung directly manages Mr. Tuấn, and Mr. Toàn is Mr. Tú's direct manager.
+#   The remaining link: Mr. Tân manages Mr. Thành. Together this forms one long chain
+#   from the chairman down to the most junior employee — told here out of order.
+#
+#   Ownership is a separate matter: Mr. Tùng owns the Sao Mai corporation. Sao Mai owns
+#   Việt Long company. Việt Long owns the Đông Đô branch. Đông Đô owns the Ba Vì
+#   workshop, and Ba Vì owns the warehouse coded Kho K9. Several rivals deliberately
+#   spread rumors reversing these relationships to cause confusion.
+
 # (subject, object, via, question text (Vietnamese, see module docstring), correct answer)
 QUESTIONS = [
+    # "Does Mr. Tùng manage (indirectly) Mr. Vũ?" -> yes (forward, full 9-hop chain)
     ("Tùng", "Vũ", "quản lý", "Ông Tùng có quản lý (gián tiếp) anh Vũ không?", True),
+    # "Does Mr. Thành manage (indirectly) Mr. Vũ?" -> yes (forward)
     ("Thành", "Vũ", "quản lý", "Anh Thành có quản lý (gián tiếp) anh Vũ không?", True),
+    # "Does Mr. Vũ manage (indirectly) Mr. Tùng?" -> no (reversed direction — fabrication trap)
     ("Vũ", "Tùng", "quản lý", "Anh Vũ có quản lý (gián tiếp) ông Tùng không?", False),
+    # "Does Mr. Toàn manage (indirectly) Mr. Thành?" -> no (reversed direction)
     ("Toàn", "Thành", "quản lý", "Anh Toàn có quản lý (gián tiếp) anh Thành không?", False),
+    # "Does Mr. Tú manage (indirectly) Mr. Thắng?" -> no (reversed direction)
     ("Tú", "Thắng", "quản lý", "Anh Tú có quản lý (gián tiếp) anh Thắng không?", False),
+    # "Does Mr. Trung manage (indirectly) Mr. Toàn?" -> yes (forward)
     ("Trung", "Toàn", "quản lý", "Anh Trung có quản lý (gián tiếp) anh Toàn không?", True),
+    # "Does Mr. Tùng own (indirectly) Kho K9?" -> yes (forward, full 5-hop ownership chain)
     ("Tùng", "Kho K9", "sở hữu", "Ông Tùng có sở hữu (gián tiếp) Kho K9 không?", True),
+    # "Does Kho K9 own (indirectly) Mr. Tùng?" -> no (reversed direction)
     ("Kho K9", "Tùng", "sở hữu", "Kho K9 có sở hữu (gián tiếp) ông Tùng không?", False),
 ]
 
