@@ -109,7 +109,7 @@ seven are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
 | Guard token cost | **+0 tokens** (vs. LLM self-verify: +110% tokens, 34% precision) |
 | SGDC (self-grounded, no external KB) | precision **78% → 100%** from internal consistency alone |
 | CLUTRR (public benchmark) | solver **~100% at every hop** vs. DeepSeek 83%→8% |
-| Hard passage (9-step chain) | DeepSeek **fabricates 2/10** (wrong direction); grounded system **10/10**, with proofs — [`examples/hallucination_demo.py`](examples/hallucination_demo.py) |
+| Hard passage (9-step chain, 8 questions) | DeepSeek **fabricates 1/8** (wrong direction); grounded system **8/8**, with proofs — [`examples/hallucination_demo.py`](examples/hallucination_demo.py) |
 
 ---
 

@@ -9,18 +9,18 @@ where LLMs tend to fabricate), then compare against the grounded system
 (relation algebra, 0 tokens, with a proof).
 
 Typical result: the LLM gets the forward chain right but FABRICATES on the
-reversed-direction questions; the grounded system scores 10/10.
+reversed-direction questions; the grounded system scores 8/8.
 
-The graph topology and the reversed-direction trap are unchanged from the
-scenario that produced the "10/10 vs. fabricates 2/10" result cited in the
-README/PAPER; only the surface language changed (that scenario originally ran
-in Vietnamese). Composition/reachability logic is language-agnostic by
-construction — entities and relations are opaque Unicode strings (see
-tests/test_agent.py::TestMultilingual) — but an LLM's tendency to fabricate on
-a specific prompt is not guaranteed to be identical across languages, so the
-exact percentage should be re-measured against this English text before
-re-citing it; only the qualitative pattern (correct on the forward chain,
-fabricates on the reversed-direction questions) is expected to carry over.
+Last measured live against `deepseek-chat` on this exact English text: the LLM
+answered 7/8 correctly (1 fabrication, on a reversed-direction question); the
+grounded system scored 8/8, 0 tokens, with a proof for every accepted claim
+(see README.md's "Evidence on real LLMs" table). An earlier version of this
+scenario ran in Vietnamese instead — composition/reachability logic is
+language-agnostic by construction (entities and relations are opaque Unicode
+strings; see tests/test_agent.py::TestMultilingual), but an LLM's tendency to
+fabricate on a specific prompt is not guaranteed to be identical across
+languages, so the English run above was re-measured from scratch rather than
+assumed to match the original Vietnamese numbers.
 
 Run:  DEEPSEEK_API_KEY=... python examples/hallucination_demo.py
       (or LLM_PROVIDER=groq/openai/... — see grounded_reasoning.LLMClient)
