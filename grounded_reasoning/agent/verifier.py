@@ -51,7 +51,12 @@ class Verdict:
 
     grounded: bool
     proof: list[str] | None = None      # the proof path (None if not grounded)
-    confidence: float = 0.0             # diffused confidence (decreases with depth)
+    confidence: float = 0.0             # diffused confidence (decreases with depth per hop-count,
+    # but is a SUM across hop-counts -- Sum_{k=1}^{K} alpha^k*(P^k)[a,b], not itself a probability --
+    # so it is NOT bounded to [0,1] in general: a strong self-loop/cycle (P^k[a,a] near 1 for many k)
+    # can push confidence above 1.0 (e.g. alpha=0.6, walk_len=8, pure self-loop -> ~1.47). Never used
+    # as a probability internally (grounded=True/False and the conformal calibration only ever
+    # compare confidences to each other or to a calibrated threshold, never to a fixed [0,1] bound).
     relation: str | None = None
 
     def as_dict(self) -> dict:

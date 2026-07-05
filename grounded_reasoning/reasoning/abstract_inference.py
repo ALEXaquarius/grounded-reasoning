@@ -22,7 +22,14 @@ theorem) has 3 properties confirmed by numerical verification
 
 Inference confidence: conf(a→b) = Sum_{k=1}^{K} alpha^k * (P^k)[a,b], P = D^-1 W
 (the weighted sum of probability of reaching b from a in <= K steps; longer
-chains are discounted by alpha).
+chains are discounted by alpha). NOT itself a probability: (P^k)[a,b] is, but
+summing several of those across k=1..K is not, so conf(a,b) is NOT bounded to
+[0,1] in general -- a strong self-loop or short cycle (where (P^k)[a,a] stays
+near 1 for many k) can push it above 1.0 (e.g. alpha=0.6, walk_len=8, a pure
+self-loop -> Sum_{k=1}^{8} 0.6^k ≈ 1.47). Harmless to every guarantee this
+engine makes (grounded/hallucination-blocking and Theorem F's per-term
+monotone decrease both hold regardless), but worth knowing before treating a
+confidence value as a calibrated probability.
 
 Unlike retrieval: this does NOT target nDCG, it targets EXPLAINABLE inference
 capability (returns the path) with no fabrication — a completely different axis,
