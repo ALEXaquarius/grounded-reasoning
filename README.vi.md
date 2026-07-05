@@ -108,6 +108,18 @@ Tái hiện tại: `tests/test_agent.py::TestEntityNormalization`,
 [`transitivity_calibration_eval.py`](grounded_reasoning/experiments/transitivity_calibration_eval.py),
 [`normalization_calibration_eval.py`](grounded_reasoning/experiments/normalization_calibration_eval.py).
 
+**Chuỗi quan hệ hỗn hợp (heterogeneous).** `verify(via=rel)` hợp thành MỘT quan
+hệ với chính nó; `gr.verify_path(subject, obj, via=["parent","employer"])` hợp
+thành một chuỗi các quan hệ **khác nhau** theo đúng thứ tự (VD một khẳng định
+suy ra "phụ thuộc tài chính vào") — không phải toán mới
+(`OperatorRelationAlgebra.follow` đã hợp thành chuỗi quan hệ hỗn hợp chính xác
+theo Định lý G, chỗ này chỉ lộ ra ở tầng facade kèm tái tạo proof path) — và
+`gr.calibrate_path(via, labeled_pairs)` hiệu chỉnh pattern cố định đó bằng
+đúng máy Clopper-Pearson như `calibrate_transitivity` (xem PAPER.md §5.3.4).
+Đã kiểm tra đối chiếu BFS độc lập qua 8.000 tổ hợp, không lệch lần nào:
+`tests/test_agent.py::TestHeterogeneousPathVerification`,
+[`heterogeneous_path_calibration_eval.py`](grounded_reasoning/experiments/heterogeneous_path_calibration_eval.py).
+
 ### So với các cách chống ảo giác thường gặp
 
 | Cách tiếp cận | Token phụ trội | Bảo đảm | Cần KB ngoài |

@@ -34,6 +34,10 @@ gr.verify("alice", "zed", via="parent").grounded   # False — hallucination blo
 
 - `verify(a, b, via=None)` — `via=None`: any-relation path; `via=rel`: transitive
   closure of a specific `rel`.
+- `verify_path(a, b, via=[rel1, rel2, ...])` — an exact chain through possibly
+  *different* relations (e.g. `["parent","employer"]`), not a single relation's
+  closure. `calibrate_path(via, labeled_pairs)` calibrates that fixed pattern
+  the same way `calibrate_transitivity` does (see below).
 - `filter_claims([(a, b, rel), ...])` — filter a BATCH of LLM claims, keep only grounded ones.
 - `contradictions(rel)` — if `rel` should be acyclic but has a cycle ⟹ returns the
   contradictory cycle (free, uses the spectrum).

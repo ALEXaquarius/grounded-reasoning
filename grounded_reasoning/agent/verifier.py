@@ -181,6 +181,66 @@ class GroundedReasoner:
         conf = self._confidence(subject, obj) if reachable else 0.0
         return Verdict(reachable, self._to_display(path), conf, via)
 
+    def verify_path(self, subject: str, obj: str, via: list[str]) -> Verdict:
+        """
+        Verify a claim via an EXACT SEQUENCE of (possibly different) relation
+        types: subject --via[0]--> x1 --via[1]--> x2 --...--> via[-1]--> obj.
+
+        Generalizes `verify(via=rel)` (a repeated closure of ONE relation) to a
+        fixed chain of arbitrary, possibly heterogeneous relations — e.g.
+        `via=["parent", "employer"]` for "subject's parent's employer". This is
+        NOT a new guarantee: `OperatorRelationAlgebra.follow` already composes
+        heterogeneous relation chains exactly (Theorem G's own verification
+        checks chains like `[r1, r2, r1]`) — this method exposes that existing
+        capability at the facade, adding proof-path reconstruction, which
+        `follow` (a pure reachability check) does not provide.
+
+        Raises ValueError if `via` is empty.
+        """
+        if not via:
+            raise ValueError("verify_path needs a non-empty via=[relation, ...] sequence")
+        subject_n, obj_n = self._norm(subject), self._norm(obj)
+        frontier: dict[str, list[str]] = {subject_n: [subject_n]}
+        for rel in via:
+            adj = self._typed.get(rel, {})
+            next_frontier: dict[str, list[str]] = {}
+            for node, path in frontier.items():
+                for nxt in adj.get(node, ()):
+                    if nxt not in next_frontier:
+                        next_frontier[nxt] = path + [nxt]
+            frontier = next_frontier
+            if not frontier:
+                break
+        path = frontier.get(obj_n)
+        reachable = path is not None
+        conf = self._confidence(subject_n, obj_n) if reachable else 0.0
+        return Verdict(reachable, self._to_display(path), conf, "->".join(via))
+
+    def calibrate_path(
+        self, via: list[str], labeled_pairs: list[tuple[str, str, bool]], alpha: float = 0.1
+    ) -> dict:
+        """
+        Calibrate confidence for a FIXED heterogeneous path pattern (Theorem M
+        generalized — see its docstring and PAPER.md §5.3.2's remark; not a new
+        theorem, since nothing in Clopper-Pearson's argument is specific to a
+        single relation's closure). From held-out (subject, object,
+        is_actually_true) triples, tallies pairs `verify_path` marks
+        `grounded=True` for the exact sequence `via` and computes an exact
+        lower confidence bound on how many are actually true.
+
+        Practical caveat this method does not hide: calibration is PER PATH
+        PATTERN — evidence for `["parent","employer"]` says nothing about
+        `["parent","parent"]`. Each distinct pattern you rely on needs its own
+        held-out calibration set.
+        """
+        from grounded_reasoning.reasoning.transitivity_calibration import calibrate_transitivity
+
+        ground_truth = {(a, b): truth for a, b, truth in labeled_pairs}
+        grounded_pairs = [
+            (a, b) for a, b, _ in labeled_pairs if self.verify_path(a, b, via).grounded
+        ]
+        return calibrate_transitivity(grounded_pairs, ground_truth, alpha=alpha)
+
     def filter_claims(self, claims) -> list[tuple[tuple, Verdict]]:
         """
         Filter a BATCH of LLM claims (subject, obj[, via]) — keep the grounded

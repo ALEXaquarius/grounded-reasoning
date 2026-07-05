@@ -282,3 +282,73 @@ class TestNormalizationCalibration:
         labeled = [("Bob", "Bob", True)]  # same raw string, not a surface-form merge
         res = gr.calibrate_normalization(labeled, alpha=0.1)
         assert res["n_grounded"] == 0
+
+
+class TestHeterogeneousPathVerification:
+    """verify_path exposes Theorem G's existing heterogeneous-composition
+    guarantee (already exercised on mixed chains in the theorem's own
+    numerical verification) at the facade level, with proof reconstruction."""
+
+    def _world(self):
+        gr = GroundedReasoner()
+        gr.add_facts([
+            ("Alice", "parent", "Bob"),
+            ("Bob", "employer", "AcmeCorp"),
+            ("AcmeCorp", "owns", "Warehouse1"),
+        ])
+        return gr
+
+    def test_two_hop_heterogeneous_chain(self):
+        gr = self._world()
+        v = gr.verify_path("Alice", "AcmeCorp", via=["parent", "employer"])
+        assert v.grounded and v.proof == ["Alice", "Bob", "AcmeCorp"]
+        assert v.relation == "parent->employer"
+
+    def test_three_hop_heterogeneous_chain(self):
+        gr = self._world()
+        v = gr.verify_path("Alice", "Warehouse1", via=["parent", "employer", "owns"])
+        assert v.grounded and v.proof == ["Alice", "Bob", "AcmeCorp", "Warehouse1"]
+
+    def test_wrong_order_is_not_grounded(self):
+        gr = self._world()
+        # the real chain is parent -> employer, not employer -> parent
+        v = gr.verify_path("Alice", "AcmeCorp", via=["employer", "parent"])
+        assert not v.grounded and v.proof is None
+
+    def test_rejects_empty_via(self):
+        gr = self._world()
+        try:
+            gr.verify_path("Alice", "AcmeCorp", via=[])
+            assert False, "expected ValueError for empty via"
+        except ValueError:
+            pass
+
+    def test_respects_normalization(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        gr.add_facts([("Alice", "parent", "Bob"), ("bob", "employer", "AcmeCorp")])
+        v = gr.verify_path("Alice", "AcmeCorp", via=["parent", "employer"])
+        assert v.grounded and v.proof == ["Alice", "Bob", "AcmeCorp"]
+
+
+class TestPathCalibration:
+    """calibrate_path generalizes calibrate_transitivity (Theorem M) to a fixed
+    heterogeneous path pattern -- same Clopper-Pearson machinery, no new math."""
+
+    def test_basic_calibration(self):
+        gr = GroundedReasoner()
+        gr.add_facts([
+            ("A1", "parent", "B1"), ("B1", "employer", "C1"),
+            ("A2", "parent", "B2"), ("B2", "employer", "C2"),
+            ("A3", "parent", "B3"), ("B3", "employer", "C3"),
+        ])
+        labeled = [("A1", "C1", True), ("A2", "C2", True), ("A3", "C3", False)]
+        res = gr.calibrate_path(["parent", "employer"], labeled, alpha=0.1)
+        assert res["n_grounded"] == 3 and res["n_confirmed"] == 2
+
+    def test_ungrounded_pairs_excluded(self):
+        gr = GroundedReasoner()
+        gr.add_facts([("A1", "parent", "B1"), ("B1", "employer", "C1")])
+        # ("A1","Z", ...) has no parent->employer path -- excluded, not a violation
+        labeled = [("A1", "C1", True), ("A1", "Z", False)]
+        res = gr.calibrate_path(["parent", "employer"], labeled, alpha=0.1)
+        assert res["n_grounded"] == 1 and res["n_confirmed"] == 1

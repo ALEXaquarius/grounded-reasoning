@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased — heterogeneous relation-path verification and calibration
+
+Not yet version-bumped or published — pending confirmation before cutting a
+release (multiple small releases in quick succession is something to avoid
+going forward; batching is preferred where it doesn't block real fixes).
+
+### Added
+
+- **`GroundedReasoner.verify_path(subject, obj, via=[rel1, rel2, ...])`** —
+  verifies a claim through an exact sequence of possibly *different* relation
+  types (e.g. `["parent", "employer"]`), generalizing `verify(via=rel)`
+  (a single relation's repeated closure). Not new math:
+  `OperatorRelationAlgebra.follow` already composes heterogeneous relation
+  chains exactly (Theorem G's own numerical verification exercises mixed
+  chains); this exposes that capability at the facade and adds proof-path
+  reconstruction, which `follow` (a pure reachability check) does not provide.
+  Checked against independent ground-truth BFS across 8,000 (subject,
+  relation-chain, object) triples with zero mismatches, every returned proof
+  path independently confirmed to consist of real edges in the declared order.
+- **`GroundedReasoner.calibrate_path(via, labeled_pairs, alpha=0.1)`** —
+  calibrates a fixed heterogeneous path pattern with the identical
+  Clopper-Pearson machinery as `calibrate_transitivity` (Theorem M);
+  documented as an honest generalization (PAPER.md §5.3.4), not a new theorem
+  letter, since nothing in Theorem M's argument was specific to a single
+  relation's closure. Practical caveat documented directly: calibration is
+  per exact path pattern — evidence for one sequence says nothing about a
+  different one.
+- **`grounded_reasoning/experiments/heterogeneous_path_calibration_eval.py`**
+  — a fully offline demo (synthetic "financially dependent on" claim composed
+  from `parent` then `employer`), checked against the *known* true precision
+  (88% empirical coverage over 200 trials against a 90% target) as well as a
+  noisier, realistic comparison against a finite held-out test sample.
+
 ## 0.1.6 — Theorem N: closing the other boundary (entity normalization)
 
 0.1.4 fixed the entity-identity gap (§5.3.1) with an opt-in `normalize=` hook,

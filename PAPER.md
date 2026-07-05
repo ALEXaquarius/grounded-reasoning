@@ -465,6 +465,45 @@ accidental collisions (a realistic fuzzy-resolver failure mode) —
 
 Same resolver as B; C is the only one that tells you how much to trust it.
 
+**5.3.4 Remark: both calibrations generalize to heterogeneous relation paths
+for free.** Nothing in Theorem M's Clopper-Pearson argument (§5.3.2) is
+specific to a *single* relation's closure — it only needs i.i.d./exchangeable
+labeled pairs for some fixed graph-derived boolean predicate. `verify_path`
+exposes exactly this at the facade: a claim composed through an exact,
+possibly heterogeneous, sequence of *different* relations (e.g.
+`["parent","employer"]` for a derived "financially dependent on" claim) —
+not new math, since `OperatorRelationAlgebra.follow` already composes such
+chains exactly (Theorem G's own numerical verification exercises mixed
+chains like `[r1, r2, r1]`); `verify_path` adds proof-path reconstruction,
+which `follow` (a pure reachability check) does not provide. `calibrate_path`
+then calibrates that fixed heterogeneous pattern with the identical
+Clopper-Pearson machinery as `calibrate_transitivity`.
+
+This is deliberately **not** given a new theorem letter: doing so would
+imply new mathematical content where there is none — the correctness of
+`verify_path` is Theorem G restated for a list of relations instead of one
+repeated relation, and the calibration is Theorem M's own already-general
+argument applied to a different predicate. The honest framing is that F–N
+already cover this; what's new in this remark is the *exposed capability*
+(`verify_path`/`calibrate_path` at the facade) and one practical caveat the
+implementation does not hide: **calibration is per exact path pattern** —
+evidence for `["parent","employer"]` says nothing about `["parent","parent"]`
+or `["employer","parent"]`; each distinct sequence relied upon needs its own
+held-out calibration set.
+
+Verified: `verify_path` checked against independent ground-truth BFS across
+8,000 (subject, relation-chain, object) triples with zero mismatches, and
+every returned proof path independently confirmed to consist of real edges
+in the declared order (`tests/test_agent.py::TestHeterogeneousPathVerification`).
+`calibrate_path`'s coverage checked the same way as Theorem M
+(`tests/test_heterogeneous_path_calibration_eval.py`), compared against the
+*true* synthetic precision (88% empirical coverage over 200 trials against a
+90% target) — a separate, deliberately noisier comparison against a finite
+held-out test sample (not the true parameter, since a real deployment
+wouldn't know it) is reported alongside for realism but is not itself a test
+of the theorem, since it compounds two independent sources of sampling
+error.
+
 **5.4 Directions to falsify or extend.** (i) Extract a grounded graph from a
 trustworthy non-LLM source and measure the guard end-to-end. (ii) Test on
 relations with cycles (ρ ≥ 1), where closure requires `α < 1/ρ`. (iii) Search

@@ -106,6 +106,18 @@ releases). Reproductions: `tests/test_agent.py::TestEntityNormalization`,
 [`transitivity_calibration_eval.py`](grounded_reasoning/experiments/transitivity_calibration_eval.py),
 [`normalization_calibration_eval.py`](grounded_reasoning/experiments/normalization_calibration_eval.py).
 
+**Heterogeneous relation chains.** `verify(via=rel)` composes ONE relation with
+itself; `gr.verify_path(subject, obj, via=["parent","employer"])` composes an
+exact sequence of *different* relations (e.g. a derived "financially dependent
+on" claim) — not new math (`OperatorRelationAlgebra.follow` already composes
+mixed-relation chains exactly per Theorem G, this just exposes it at the
+facade with proof-path reconstruction) — and `gr.calibrate_path(via,
+labeled_pairs)` calibrates that fixed pattern with the same Clopper-Pearson
+engine as `calibrate_transitivity` (see PAPER.md §5.3.4). Checked against
+independent ground-truth BFS across 8,000 triples with zero mismatches:
+`tests/test_agent.py::TestHeterogeneousPathVerification`,
+[`heterogeneous_path_calibration_eval.py`](grounded_reasoning/experiments/heterogeneous_path_calibration_eval.py).
+
 ### How this differs from the usual fixes
 
 | Approach | Extra tokens | Guarantee | Needs an external KB |
@@ -251,7 +263,7 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration — reused for both the transitivity assumption (Theorem M) and the normalization over-merge risk (Theorem N) |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
 | `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo |
 | `examples/quickstart.ipynb` | Runnable tour of the library (offline, Colab-ready) |
 

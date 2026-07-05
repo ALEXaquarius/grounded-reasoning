@@ -32,6 +32,10 @@ gr.verify("alice", "zed", via="parent").grounded   # False — ảo giác bị c
 
 - `verify(a, b, via=None)` — `via=None`: đường đi bất kỳ quan hệ; `via=rel`: bắc cầu
   của riêng `rel`.
+- `verify_path(a, b, via=[rel1, rel2, ...])` — chuỗi chính xác qua các quan hệ
+  có thể **khác nhau** (VD `["parent","employer"]`), không phải bắc cầu của
+  một quan hệ. `calibrate_path(via, labeled_pairs)` hiệu chỉnh pattern cố định
+  đó giống hệt `calibrate_transitivity` (xem bên dưới).
 - `filter_claims([(a, b, rel), ...])` — lọc một LÔ claim LLM, giữ grounded.
 - `contradictions(rel)` — nếu `rel` đáng ra acyclic mà có chu trình ⟹ trả chu trình
   mâu thuẫn (miễn phí, dùng phổ).
