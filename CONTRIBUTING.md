@@ -37,5 +37,6 @@ pytest tests/          # no API key needed — every LLM-dependent invariant is 
 ## Public API
 
 User-facing imports go through the `grounded_reasoning` package; internal
-implementation lives under `src/`. Breaking changes to `grounded_reasoning/__init__.py`
-require a version bump and a `CHANGELOG.md` entry.
+implementation lives under the same `grounded_reasoning/` tree (`agent/`,
+`reasoning/`, `theory/`, `experiments/`). Breaking changes to
+`grounded_reasoning/__init__.py` require a version bump and a `CHANGELOG.md` entry.

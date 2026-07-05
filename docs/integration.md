@@ -147,3 +147,13 @@ grounded = [c for c, v in gr.filter_claims(llm_claims) if v.grounded]
 - Targets **relational/transitive hallucination** specifically, NOT free-standing
   factual hallucination.
 - It is a **verification layer**, not an open-ended reasoning engine that replaces the LLM.
+- **Entities are matched by exact string equality by default.** An LLM extraction
+  that's inconsistent about one entity's surface form (`"Bob"` vs `"bob"`) silently
+  breaks an otherwise-true proof path. Pass `GroundedReasoner(normalize=lambda s:
+  s.strip().casefold())` to fold surface-form variants together (off by default,
+  since case can be semantically meaningful in some domains).
+- **`via=rel` assumes `rel` is genuinely transitive in reality**, not just in the
+  supplied graph. Composing a partially/conditionally transitive relation (e.g.
+  "trusts") still returns a confident `grounded=True` that answers a different
+  question than intended. Pass `GroundedReasoner(transitive_relations={...})` to make
+  the guard reject any undeclared relation instead of silently trusting it.

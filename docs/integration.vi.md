@@ -142,3 +142,13 @@ phân-phối-tự-do ≥ 1−α thay cho precision cứng — xem `PAPER.md` §7
   đồ thị được cấp* (dùng conformal để làm mềm khi nhiễu).
 - Chỉ nhắm **ảo giác quan hệ/bắc cầu**, KHÔNG nhắm ảo giác sự kiện tự do.
 - Là lớp **kiểm chứng**, không phải bộ suy luận mở thay LLM.
+- **Entity mặc định so khớp chuỗi chính xác.** Nếu LLM trích xuất không nhất quán về
+  cách viết một entity (`"Bob"` vs `"bob"`), một đường chứng minh đúng có thể bị đứt
+  âm thầm. Dùng `GroundedReasoner(normalize=lambda s: s.strip().casefold())` để gộp
+  các biến thể cách viết lại (tắt mặc định, vì hoa/thường đôi khi có ý nghĩa ngữ nghĩa
+  riêng tùy domain).
+- **`via=rel` giả định `rel` thực sự bắc cầu trong thực tế**, không chỉ trong đồ thị
+  được cấp. Áp dụng cho quan hệ chỉ bắc cầu một phần/có điều kiện (ví dụ "trusts") vẫn
+  cho ra `grounded=True` một cách tự tin nhưng trả lời sai câu hỏi. Dùng
+  `GroundedReasoner(transitive_relations={...})` để guard từ chối mọi quan hệ chưa
+  khai báo thay vì âm thầm tin tưởng.

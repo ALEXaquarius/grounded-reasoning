@@ -131,7 +131,7 @@ seven are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
 
 | Experiment | Result |
 |------------|--------|
-| Hallucination guard (kinship) | precision **33% → 100%**, catches 94/94, 0 false rejects |
+| Hallucination guard (kinship) | precision **33% → 100%**, catches 92/92 (two seeds), 0 false rejects |
 | Guard token cost | **+0 tokens** (vs. LLM self-verify: +110% tokens, 34% precision) |
 | SGDC (self-grounded, no external KB) | precision **78% → 100%** from internal consistency alone |
 | Dense, anti-commonsense ontology | precision **31% → 100%**, catches 106/106, 0 false rejects — [`nl_ontology_eval.run_dense`](grounded_reasoning/experiments/nl_ontology_eval.py) |
