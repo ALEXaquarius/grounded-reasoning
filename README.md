@@ -67,6 +67,32 @@ benchmark numbers — not a new primitive. The guard needs a relation graph
 (supplied, or extracted from LLM facts); flexibility is bounded (see
 [PAPER §5](PAPER.md)).
 
+### Two sharp edges the algebra itself can't see (and how to guard them)
+
+Raised in review, reproduced, and fixed with an opt-in guard each — not swept
+under the rug:
+
+- **Entity identity is exact-string by default.** If an LLM extraction is
+  inconsistent about one entity's surface form (`"Bob"` vs `"bob"`), the graph
+  treats them as two nodes and a real path silently breaks — the guard then
+  (correctly, per its own contract) rejects a claim that is actually true.
+  Fix: `GroundedReasoner(normalize=lambda s: s.strip().casefold())` folds
+  surface-form variants together before they become graph keys; proofs still
+  display each entity's original first-seen spelling.
+- **Theorem G doesn't know if `via` is transitive in reality.** It guarantees
+  "a path exists under the closure of `via`," not "`via` actually composes in
+  the world." Compose a relation that's only partially/conditionally
+  transitive (`"trusts"`: A trusts B, B trusts C, does not imply A trusts C)
+  and you get a confident, mathematically correct `grounded=True` that answers
+  a different question than the one you meant to ask. Fix:
+  `GroundedReasoner(transitive_relations={"parent", "is_a", ...})` makes the
+  guard raise `ValueError` for any undeclared relation, turning a silent
+  modeling assumption into an explicit, checked one.
+
+Both are opt-in and off by default (identical behavior to previous releases).
+Reproductions: `tests/test_agent.py::TestEntityNormalization`,
+`::TestTransitiveRelationsGuard`.
+
 ### How this differs from the usual fixes
 
 | Approach | Extra tokens | Guarantee | Needs an external KB |

@@ -4,6 +4,45 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.4 — Two opt-in guards for boundaries the algebra can't see itself
+
+Raised in an external review of the algebra (entity identity, transitivity as
+a modeling assumption), reproduced with failing tests first, then fixed —
+both opt-in and off by default, so this release changes no existing behavior
+unless you opt in.
+
+### Added
+
+- **`GroundedReasoner(normalize=...)`** — an optional entity-canonicalization
+  hook (e.g. `lambda s: s.strip().casefold()`) applied to every subject/object
+  before it becomes a graph key. Closes a real failure mode: an LLM extraction
+  that's inconsistent about one entity's surface form (`"Bob"` vs `"bob"`)
+  silently splits it into two graph nodes, breaking an otherwise-true proof
+  path — the guard then correctly, per its own contract, rejects a claim that
+  is actually true, because identity resolution failed one layer above the
+  algebra. Proof paths and `contradictions()` cycles still report each
+  entity's original first-seen spelling, never the normalized form.
+- **`GroundedReasoner(transitive_relations={...})`** — an optional allowlist.
+  When set, `verify(..., via=rel)` raises `ValueError` for any `rel` not in
+  the set, instead of silently returning a confident `grounded=True` for a
+  relation that may not actually be transitive in reality (Theorem G
+  guarantees "a path exists under the closure of `via`," not "`via` composes
+  transitively in the world" — the algebra cannot tell the two apart from
+  data alone). Converts a silent modeling assumption into an explicit,
+  checked one.
+- `verify_relation`/`run_tool` (the stateless agent tool) now strip incidental
+  leading/trailing whitespace from every entity string by default (not
+  opt-in — this is unambiguously safe and matches the function's existing
+  "tolerant of LLM input" contract). Case is left untouched by default; use
+  `GroundedReasoner(normalize=...)` directly for case-insensitive domains.
+
+### Changed
+
+- README.md/README.vi.md and PAPER.md §5.3.1 document both boundaries
+  explicitly, with the exact failure-mode reproductions
+  (`tests/test_agent.py::TestEntityNormalization`,
+  `::TestTransitiveRelationsGuard`) referenced by name.
+
 ## 0.1.3 — Fix a real packaging bug; hardening from an independent code review
 
 ### Fixed

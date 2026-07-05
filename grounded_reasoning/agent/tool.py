@@ -67,17 +67,24 @@ def verify_relation(facts, subject: str, relation: str, object: str) -> dict:  #
     {grounded, proof, confidence, relation}.
 
     Tolerant of LLM input: SKIPS any fact not shaped like [s, r, o] (instead of
-    crashing the agent), and reports the number skipped under `skipped_facts`.
+    crashing the agent), reports the number skipped under `skipped_facts`, and
+    strips incidental leading/trailing whitespace from every entity string —
+    an LLM emitting " Bob" in one place and "Bob" in another is an extraction
+    artifact, not a claim that they're different entities, and left unhandled
+    it silently breaks a real proof path (see GroundedReasoner's docstring).
+    Differences in case are left alone (case CAN be semantically meaningful),
+    so callers with case-insensitive domains should build their own
+    `GroundedReasoner(normalize=...)` instead of using this stateless helper.
     """
     gr = GroundedReasoner()
     clean, skipped = [], 0
     for t in facts or []:
         if isinstance(t, (list, tuple)) and len(t) == 3 and all(x is not None for x in t):
-            clean.append([str(t[0]), str(t[1]), str(t[2])])
+            clean.append([str(t[0]).strip(), str(t[1]).strip(), str(t[2]).strip()])
         else:
             skipped += 1
     gr.add_facts(clean)
-    out = gr.verify(str(subject), str(object), via=str(relation)).as_dict()
+    out = gr.verify(str(subject).strip(), str(object).strip(), via=str(relation).strip()).as_dict()
     if skipped:
         out["skipped_facts"] = skipped
     return out

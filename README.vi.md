@@ -68,6 +68,32 @@ hợp nhất + một bảo đảm được đo đạc + số liệu benchmark**,
 mới. Bộ bảo vệ **cần một đồ thị quan hệ** (được cung cấp, hoặc trích từ fact do LLM
 sinh ra) — tính linh hoạt có giới hạn (xem [PAPER.md §5](PAPER.md)).
 
+### Hai điểm mù mà bản thân đại số không thể tự thấy (và cách chặn)
+
+Được nêu ra khi review, tái hiện lại bằng test, và fix bằng cơ chế opt-in cho
+từng điểm — không giấu đi:
+
+- **Định danh entity mặc định là so khớp chuỗi chính xác.** Nếu LLM trích xuất
+  không nhất quán về cách viết một entity (`"Bob"` vs `"bob"`), đồ thị coi đó
+  là 2 node khác nhau và một đường chứng minh thật bị đứt âm thầm — guard khi
+  đó (đúng theo hợp đồng của chính nó) từ chối một khẳng định thực ra là đúng.
+  Cách fix: `GroundedReasoner(normalize=lambda s: s.strip().casefold())` gộp
+  các biến thể cách viết lại trước khi chúng trở thành khóa đồ thị; proof vẫn
+  hiển thị đúng cách viết gốc xuất hiện đầu tiên của mỗi entity.
+- **Định lý G không biết `via` có bắc cầu thật trong thực tế hay không.** Nó
+  chỉ đảm bảo "tồn tại đường đi dưới closure của `via`", không đảm bảo `via`
+  thực sự bắc cầu trong thế giới thật. Áp dụng cho một quan hệ chỉ bắc cầu một
+  phần/có điều kiện (`"trusts"`: A tin B, B tin C, không suy ra A tin C) sẽ vẫn
+  cho ra `grounded=True` một cách tự tin và đúng về mặt toán học — nhưng trả
+  lời một câu hỏi khác với câu bạn thực sự muốn hỏi. Cách fix:
+  `GroundedReasoner(transitive_relations={"parent", "is_a", ...})` khiến guard
+  raise `ValueError` cho bất kỳ quan hệ nào chưa khai báo, biến một giả định
+  ngầm thành một hợp đồng tường minh, được kiểm tra.
+
+Cả hai đều là opt-in và tắt mặc định (hành vi giống hệt các bản trước).
+Tái hiện tại: `tests/test_agent.py::TestEntityNormalization`,
+`::TestTransitiveRelationsGuard`.
+
 ### So với các cách chống ảo giác thường gặp
 
 | Cách tiếp cận | Token phụ trội | Bảo đảm | Cần KB ngoài |

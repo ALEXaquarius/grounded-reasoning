@@ -81,6 +81,15 @@ class TestTool:
         assert spec["function"]["name"] == "verify_relation"
         assert spec["function"]["parameters"] == TOOL_SPEC["input_schema"]
 
+    def test_stateless_tool_strips_incidental_whitespace(self):
+        # a realistic LLM-extraction artifact: inconsistent whitespace around
+        # the SAME entity across different facts/claim, an easy way to
+        # silently break an otherwise-true proof path.
+        r = verify_relation(
+            [["a ", "p", " b"], [" b", "p", "c "]], "a", "p", " c",
+        )
+        assert r["grounded"] and r["proof"] == ["a", "b", "c"]
+
 
 class TestMultilingual:
     def test_unicode_entities_and_relations(self):
@@ -95,3 +104,82 @@ class TestMultilingual:
         assert gr2.verify("父", "曾祖父", via="是").grounded
 
         assert verify_relation([["أب", "والد", "جد"]], "أب", "والد", "جد")["grounded"]
+
+
+class TestEntityNormalization:
+    """The 'Bob' vs 'bob' failure mode: a real path silently broken by an
+    LLM extraction that's inconsistent about one entity's surface form."""
+
+    def test_without_normalize_a_case_mismatch_breaks_a_true_path(self):
+        # documents the CURRENT boundary (default behavior), not a bug: exact
+        # string equality is the historical/backward-compatible default.
+        gr = GroundedReasoner()
+        gr.add_facts([("Alice", "parent", "Bob"), ("bob", "parent", "Carol")])
+        v = gr.verify("Alice", "Carol", via="parent")
+        assert not v.grounded and v.proof is None
+
+    def test_normalize_hook_fixes_the_case_mismatch(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        gr.add_facts([("Alice", "parent", "Bob"), ("bob", "parent", "Carol")])
+        v = gr.verify("Alice", "Carol", via="parent")
+        assert v.grounded
+        assert v.proof == ["Alice", "Bob", "Carol"]  # original spelling, not "bob"
+
+    def test_normalize_hook_also_fixes_whitespace_variants(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip())
+        gr.add_facts([("Alice", "parent", "Bob "), (" Bob", "parent", "Carol")])
+        v = gr.verify("Alice", "Carol", via="parent")
+        assert v.grounded
+        # display uses each entity's literal FIRST-SEEN spelling (untouched,
+        # including the trailing space) -- normalization affects graph
+        # identity, not cosmetic cleanup of the reported proof
+        assert v.proof == ["Alice", "Bob ", "Carol"]
+
+    def test_normalize_preserves_first_seen_spelling_in_contradictions(self):
+        gr = GroundedReasoner(normalize=lambda s: s.casefold())
+        gr.add_facts([("Cat", "is_a", "Mammal"), ("Mammal", "is_a", "Animal"),
+                      ("animal", "is_a", "cat")])  # closes a cycle only once normalized
+        cyc = gr.contradictions("is_a")
+        assert len(cyc) == 1
+        assert set(cyc[0]) == {"Cat", "Mammal", "Animal"}  # original spellings, not lowercased
+
+    def test_no_normalize_is_fully_backward_compatible(self):
+        # default (normalize=None) behavior is byte-for-byte the pre-existing one
+        gr = GroundedReasoner()
+        gr.add_facts([("alice", "parent", "bob"), ("bob", "parent", "carol")])
+        v = gr.verify("alice", "carol", via="parent")
+        assert v.grounded and v.proof == ["alice", "bob", "carol"]
+
+
+class TestTransitiveRelationsGuard:
+    """Theorem G's guarantee only holds for a `via` relation that is genuinely
+    transitive in reality; the algebra can't verify that from data alone."""
+
+    def test_default_is_fully_permissive_backward_compatible(self):
+        gr = GroundedReasoner()  # transitive_relations=None (default)
+        gr.add_facts([("Alice", "trusts", "Bob"), ("Bob", "trusts", "Mallory")])
+        v = gr.verify("Alice", "Mallory", via="trusts")
+        assert v.grounded  # unchanged legacy behavior: no relation is rejected
+
+    def test_undeclared_relation_raises(self):
+        gr = GroundedReasoner(transitive_relations={"parent", "is_a"})
+        gr.add_facts([("Alice", "trusts", "Bob"), ("Bob", "trusts", "Mallory")])
+        try:
+            gr.verify("Alice", "Mallory", via="trusts")
+            assert False, "expected ValueError for an undeclared relation"
+        except ValueError as e:
+            assert "trusts" in str(e) and "transitive_relations" in str(e)
+
+    def test_declared_relation_works_normally(self):
+        gr = GroundedReasoner(transitive_relations={"parent"})
+        gr.add_facts([("alice", "parent", "bob"), ("bob", "parent", "carol")])
+        v = gr.verify("alice", "carol", via="parent")
+        assert v.grounded and v.proof == ["alice", "bob", "carol"]
+
+    def test_any_relation_path_via_none_is_unaffected_by_the_allowlist(self):
+        # the allowlist only gates the EXPLICIT via=rel form; via=None ("any
+        # relation path exists") has different semantics, documented separately.
+        gr = GroundedReasoner(transitive_relations={"parent"})
+        gr.add_facts([("alice", "trusts", "bob")])
+        v = gr.verify("alice", "bob")  # via=None
+        assert v.grounded

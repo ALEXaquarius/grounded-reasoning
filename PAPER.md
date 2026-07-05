@@ -301,6 +301,43 @@ extraction noise directly). This is not a self-contained, open-ended reasoner
 replacing the LLM; it is a grounded verification layer, powerful and cheap
 when a graph exists, and inert without one.
 
+**5.3.1 Two boundaries the algebra cannot see, raised in external review and
+reproduced.** Both are properties of the graph-construction layer sitting
+*above* the algebra, not counterexamples to Theorem G, but both silently
+change what question is actually being answered if left unguarded:
+
+- *Entity identity.* `follow`/`verify` key entities by exact string equality
+  (`OperatorRelationAlgebra._id`). If an upstream LLM extraction is
+  inconsistent about one entity's surface form (`"Bob"` vs `"bob"`), the two
+  spellings become two distinct graph nodes, and a real path silently breaks
+  — the guard then correctly, per Theorem G, rejects a claim that is true in
+  the world, because identity resolution failed one layer up, not because the
+  matrix product is wrong. Reproduced in
+  `tests/test_agent.py::TestEntityNormalization::test_without_normalize_a_case_mismatch_breaks_a_true_path`.
+  Fix shipped as an opt-in constructor hook, `GroundedReasoner(normalize=...)`,
+  that canonicalizes entity strings before they become graph keys while still
+  reporting each entity's original first-seen spelling in `proof`.
+- *Transitivity is a modeling assumption, not a derivable property.* Theorem
+  G's guarantee is "a path exists under the closure of `via`" — it is silent
+  on whether `via` composes transitively in reality. Composing a relation
+  that is only partially or conditionally transitive in the world (e.g.
+  "trusts": *A trusts B* and *B trusts C* does not imply *A trusts C*)
+  still returns a confident, mathematically correct `grounded=True` that
+  answers a different question than the one intended. No graph-theoretic test
+  over the *supplied* facts can distinguish "genuinely transitive relation,
+  sparse sample" from "non-transitive relation" without ground truth outside
+  the data. Reproduced in
+  `tests/test_agent.py::TestTransitiveRelationsGuard::test_default_is_fully_permissive_backward_compatible`.
+  Fix shipped as an opt-in constructor allowlist,
+  `GroundedReasoner(transitive_relations={...})`, that raises `ValueError` for
+  any undeclared `via`, converting a silent assumption into an explicit,
+  checked one at the call site.
+
+Both fixes are opt-in (default `None`, identical behavior to prior releases)
+because neither failure mode is fixable *in general* — case sensitivity and
+non-transitive relations both have legitimate, intended uses; the library
+cannot make that domain judgment call for the caller, only offer the guard.
+
 **5.4 Directions to falsify or extend.** (i) Extract a grounded graph from a
 trustworthy non-LLM source and measure the guard end-to-end. (ii) Test on
 relations with cycles (ρ ≥ 1), where closure requires `α < 1/ρ`. (iii) Search
