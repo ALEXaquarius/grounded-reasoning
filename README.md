@@ -161,6 +161,7 @@ nine are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
 | Experiment | Result |
 |------------|--------|
 | Hallucination guard (kinship) | precision **33% → 100%**, catches 92/92 (two seeds), 0 false rejects |
+| Hallucination guard, harder stress test (48-person tree, sibling/spouse distractor facts, shuffled prose, T=0.7, guaranteed-empty trap questions) | raw DeepSeek precision **4.6%** (2124 fabricated names, 86/90 trap questions answered with a fabrication); guarded precision **100%**, 0 leaked, 0 correct answers dropped — [`guard_llm_stress_eval.py`](grounded_reasoning/experiments/guard_llm_stress_eval.py) |
 | Guard token cost | **+0 tokens** (vs. LLM self-verify: +110% tokens, 34% precision) |
 | SGDC (self-grounded, no external KB) | precision **78% → 100%** from internal consistency alone |
 | Dense, anti-commonsense ontology | precision **31% → 100%**, catches 106/106, 0 false rejects — [`nl_ontology_eval.run_dense`](grounded_reasoning/experiments/nl_ontology_eval.py) |
@@ -210,6 +211,7 @@ python -c "from grounded_reasoning import GroundedReasoner as G; r=G(); r.add_fa
 # Real-LLM experiments (need a key — read from an env var, NEVER hardcoded):
 export DEEPSEEK_API_KEY=sk-...        # bring your own; .env is gitignored
 python -m grounded_reasoning.experiments.guard_llm_eval        # hallucination guard
+python -m grounded_reasoning.experiments.guard_llm_stress_eval # harder: distractors + traps + high temperature
 python -m grounded_reasoning.experiments.self_grounded_eval    # SGDC
 python -m grounded_reasoning.experiments.clutrr_eval           # public CLUTRR benchmark
 python -m grounded_reasoning.experiments.conformal_llm_eval    # end-to-end conformal (LLM-extracted graph)
@@ -263,7 +265,7 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration — reused for both the transitivity assumption (Theorem M) and the normalization over-merge risk (Theorem N) |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
 | `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo |
 | `examples/quickstart.ipynb` | Runnable tour of the library (offline, Colab-ready) |
 

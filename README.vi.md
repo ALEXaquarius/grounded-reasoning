@@ -163,6 +163,7 @@ Cả chín định lý được phát biểu, chứng minh, và kiểm chứng s
 | Thực nghiệm | Kết quả |
 |------------|--------|
 | Guard chống ảo giác (quan hệ họ hàng) | precision **33% → 100%**, bắt được 92/92 (2 seed), 0 từ chối nhầm |
+| Guard chống ảo giác, bài test khó hơn (cây 48 người, sự kiện gây nhiễu anh/em/vợ chồng, văn xuôi xáo trộn, T=0.7, câu hỏi bẫy đáp án rỗng) | DeepSeek thô precision **4.6%** (2124 tên bịa, 86/90 câu hỏi bẫy bị bịa); sau guard precision **100%**, 0 lọt, 0 đáp án đúng bị loại nhầm — [`guard_llm_stress_eval.py`](grounded_reasoning/experiments/guard_llm_stress_eval.py) |
 | Chi phí token của guard | **+0 token** (so với LLM tự kiểm: +110% token, 34% precision) |
 | SGDC (self-grounded, không KB ngoài) | precision **78% → 100%** chỉ từ tính nhất quán nội tại |
 | Ontology dày đặc, phản trực giác | precision **31% → 100%**, bắt được 106/106, 0 từ chối nhầm — [`nl_ontology_eval.run_dense`](grounded_reasoning/experiments/nl_ontology_eval.py) |
@@ -211,6 +212,7 @@ python -c "from grounded_reasoning import GroundedReasoner as G; r=G(); r.add_fa
 # Thực nghiệm LLM thật (cần API key — đọc từ biến môi trường, KHÔNG BAO GIỜ hardcode):
 export DEEPSEEK_API_KEY=sk-...        # tự mang key của bạn; .env đã gitignore
 python -m grounded_reasoning.experiments.guard_llm_eval        # guard chống ảo giác
+python -m grounded_reasoning.experiments.guard_llm_stress_eval # khó hơn: nhiễu + bẫy + nhiệt độ cao
 python -m grounded_reasoning.experiments.self_grounded_eval    # SGDC
 python -m grounded_reasoning.experiments.clutrr_eval           # benchmark công khai CLUTRR
 python -m grounded_reasoning.experiments.conformal_llm_eval    # conformal đầu-cuối (đồ thị do LLM trích)
