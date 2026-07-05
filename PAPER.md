@@ -786,31 +786,62 @@ grouping could not touch. The two are complementary, not competing: this
 targets specific corrupted edges from labeled evidence; redundancy grouping
 targets structural heterogeneity among otherwise-legitimate claims.
 
-**The tradeoffs, stated plainly and MEASURED, not just disclosed as a
-possibility (this is a decision rule, not a proof).** Unlike every
-calibration method elsewhere in this project, this one carries no
-probabilistic bound: (1) there is no false-discovery-rate guarantee, and the
-wrongly-removed rate is not negligible — measured directly (a genuinely
-correct edge is one that exists in the true generating graph): with a 50/50
-split of held-out data (half to identify suspect edges, half reserved for
-the table above) and the default rule (`min_evidence=1`), **17–19% of
-removed edges were genuinely correct**, across the dropout-dominant regime.
-Two measured mitigations, not a formal fix: using a *larger* share of
-held-out data to identify suspect edges (`identify_frac=0.8` instead of
-0.5) drops this to **~5.5%**, and additionally requiring a second
-corroborating false-claim encounter (`min_evidence=2`) drops it further to
-**~4.2–4.5%** — at a real, measured cost: cleaned FPR rises from ~49.2% to
-~58.0% in the same regime (still far below the 77.0% raw baseline), and the
-reserved evaluation set shrinks. See
+**The tradeoffs, stated plainly and MEASURED across every regime — not just
+disclosed as a possibility, not just measured in one scenario (this is a
+decision rule, not a proof).** Unlike every calibration method elsewhere in
+this project, this one carries no probabilistic bound. (1) There is no
+false-discovery-rate guarantee, and the wrongly-removed rate is not
+negligible. Measured directly (a genuinely correct edge is one that exists
+in the true generating graph), pooling all blocked edges across 60 seeds
+per regime, with the default rule (`identify_frac=0.5`, `min_evidence=1`):
+
+| Noise regime | Wrongly-blocked rate (pooled) |
+|---|---:|
+| Dropout-dominant | 19.3% |
+| Spurious-dominant | 14.0% |
+| Heavy dropout | 21.5% |
+| Light spurious | 32.2% |
+| Heavy spurious | 13.2% |
+
+**Mitigation, measured the same way, not just in one regime:** a larger
+identification share (`identify_frac=0.8`) plus a second corroborating
+false-claim encounter (`min_evidence=2`) — reported as the pooled rate
+together with a one-sided 95% Wilson upper confidence bound (a large-*n*
+asymptotic approximation; `clopper_pearson_lower` elsewhere in this project
+overflows at these pooled sample sizes, in the hundreds to low thousands —
+see `wilson_upper_bound` in `edge_pruning_eval.py`):
+
+| Noise regime | Wrongly-blocked rate (pooled) | 95% upper bound |
+|---|---:|---:|
+| Dropout-dominant | 4.5% | 7.2% |
+| Spurious-dominant | 2.4% | 4.1% |
+| Heavy dropout | 3.7% | 6.3% |
+| Light spurious | 5.5% | 11.4% |
+| Heavy spurious | 2.9% | 4.7% |
+
+Light-spurious noise is both the worst case and the noisiest estimate — it
+blocks the fewest edges of any regime (avg. ~2 with this configuration), so
+its confidence bound is widest. Even so, its upper bound stays under 12%,
+against a raw baseline of 32.2% (unmitigated) — a real, quantified, bounded
+residual risk, not eliminated, but precisely characterized rather than left
+as "could in principle happen." The cost: cleaned FPR rises (e.g. ~49.2% to
+~58.0% in the dropout-dominant regime, still far below the 77.0% raw
+baseline), and the reserved evaluation set shrinks. See
 `run_mitigation_comparison` in `edge_pruning_eval.py` and
-`test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate`. (2)
-it costs real recall regardless of configuration — any true claim depending
-solely on a removed edge loses that path (visible above as the small
-coverage shifts between raw and cleaned); (3) it edits the graph in place, a
-one-way structural change, unlike calibration (which only adjusts a
-threshold and leaves the graph untouched) — if the query distribution later
-differs from the held-out sample used to prune, a removed edge might have
-been needed after all.
+`test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate` /
+`test_wilson_upper_bound_basic_properties`. Verdict: the residual risk,
+once bounded and quantified this way, is small enough relative to the FPR
+reduction retained in every regime to keep the feature — with
+`identify_frac=0.8, min_evidence=2` as the recommended (not yet default,
+to preserve backward compatibility) configuration wherever a wrongly-
+removed edge is more costly than a slower cleaning rate. (2) It costs real
+recall regardless of configuration — any true claim depending solely on a
+removed edge loses that path (visible above as the small coverage shifts
+between raw and cleaned); (3) it edits the graph in place, a one-way
+structural change, unlike calibration (which only adjusts a threshold and
+leaves the graph untouched) — if the query distribution later differs from
+the held-out sample used to prune, a removed edge might have been needed
+after all.
 
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 

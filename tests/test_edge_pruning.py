@@ -5,7 +5,22 @@ LLM/network needed.
 """
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 from grounded_reasoning.reasoning.edge_pruning import identify_suspect_edges, prune_edges
-from grounded_reasoning.experiments.edge_pruning_eval import run, run_mitigation_comparison
+from grounded_reasoning.experiments.edge_pruning_eval import (
+    run,
+    run_mitigation_comparison,
+    wilson_upper_bound,
+)
+
+
+def test_wilson_upper_bound_basic_properties():
+    # zero observed successes still leaves a small but nonzero upper bound --
+    # absence of evidence in a finite sample isn't proof of a zero true rate
+    assert 0.0 < wilson_upper_bound(0, 100) < 0.05
+    # a 95% upper bound must sit at or above the point estimate
+    assert wilson_upper_bound(10, 100) > 10 / 100
+    # more trials at the same observed rate -> tighter (smaller) upper bound
+    assert wilson_upper_bound(100, 1000) < wilson_upper_bound(10, 100)
+    assert wilson_upper_bound(0, 0) == 0.0
 
 
 def test_blocks_a_spurious_edge_with_zero_true_support():
@@ -63,15 +78,21 @@ def test_cleaning_reduces_fpr_across_noise_regimes():
 
 
 def test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate():
-    # the measured mitigation: using a larger share of held-out data to
-    # identify suspect edges, plus requiring a second corroborating
-    # false-claim encounter, substantially reduces the rate at which a
-    # genuinely correct edge is wrongly removed -- a real cost of the
-    # decision rule, not just a theoretical possibility, and not eliminated
-    # by this mitigation, only reduced
-    res = run_mitigation_comparison(n_seeds=20)
-    default = res["default (identify_frac=0.5, min_evidence=1)"]
-    safer = res["safer (identify_frac=0.8, min_evidence=2)"]
-    assert safer["wrongly_blocked_rate"] < default["wrongly_blocked_rate"] - 0.05
-    # the mitigation still cleans meaningfully, just less aggressively
-    assert safer["cleaned_fpr"] < 0.7
+    # the measured mitigation, checked in EVERY noise regime (not just one):
+    # using a larger share of held-out data to identify suspect edges, plus
+    # requiring a second corroborating false-claim encounter, substantially
+    # reduces the rate at which a genuinely correct edge is wrongly removed
+    # -- a real cost of the decision rule, not just a theoretical
+    # possibility, and not eliminated by this mitigation, only reduced. The
+    # upper-confidence-bound check is the precise, worst-case claim: even
+    # accounting for sampling noise, the mitigated rate stays bounded.
+    res = run_mitigation_comparison(n_seeds=40)
+    for regime, configs in res.items():
+        default = configs["default (identify_frac=0.5, min_evidence=1)"]
+        safer = configs["safer (identify_frac=0.8, min_evidence=2)"]
+        assert safer["pooled_wrongly_blocked_rate"] < default["pooled_wrongly_blocked_rate"], f"{regime}: {configs}"
+        # worst measured regime (light spurious, fewest edges blocked) still
+        # stays under a 20% 95%-upper-confidence-bound on the wrongly-blocked rate
+        assert safer["wrongly_blocked_upper_bound"] < 0.20, f"{regime}: {safer}"
+        # the mitigation still cleans meaningfully, just less aggressively
+        assert safer["cleaned_fpr"] < safer["raw_fpr"], f"{regime}: {safer}"

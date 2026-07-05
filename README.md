@@ -239,18 +239,24 @@ was numerically **falsified**: it made FPR worse at every noise level,
 because Mondrian must preserve coverage even for the few true claims that
 cross a bad edge, forcing that group's threshold down. Unlike every
 calibration method above, this one carries **no false-discovery-rate
-guarantee** — a real tradeoff, MEASURED, not just disclosed as a
-possibility: with a 50/50 split of held-out data (half to identify suspect
-edges, half reserved for evaluation) and the default rule, **17–19% of
-removed edges were genuinely correct**. Using a larger share of held-out
-data to identify suspect edges (`identify_frac=0.8` instead of 0.5) drops
-this to **~5.5%**, and additionally requiring a second corroborating
-false-claim encounter (`min_evidence=2`) drops it further to **~4.2–4.5%**
-— at the cost of a smaller reserved evaluation set and a somewhat higher
-cleaned FPR (~58.0% instead of ~49.2% in the same regime, still far below
-the 77.0% raw baseline). It also costs real recall for any true claim that
-depended solely on a removed edge, and it edits the graph in place (a
-one-way change, unlike calibration which only adjusts a threshold).
+guarantee** — a real tradeoff, MEASURED across all 5 regimes, not just
+disclosed as a possibility or checked in one scenario: with the default
+split (`identify_frac=0.5, min_evidence=1`), the pooled wrongly-removed
+rate ranges **13.2%–32.2%** across regimes (worst: light spurious, where
+fewest edges get blocked). Using a larger identification share
+(`identify_frac=0.8`) plus a second corroborating false-claim encounter
+(`min_evidence=2`) drops this to **2.4%–5.5%**, with a 95% upper confidence
+bound (Wilson interval) of **4.1%–11.4%** across regimes — the wider bound
+in light-spurious noise reflects fewer edges blocked, not a worse rule.
+Cost: cleaned FPR rises somewhat (e.g. ~49.2% → ~58.0% in the
+dropout-dominant regime, still far below the 77.0% raw baseline), and the
+reserved evaluation set shrinks. **Verdict: kept, with this configuration
+recommended** wherever a wrongly-removed edge is costlier than a slower
+cleaning rate — the residual risk is now bounded and quantified rather than
+left as "could in principle happen." It also costs real recall for any true
+claim that depended solely on a removed edge, and it edits the graph in
+place (a one-way change, unlike calibration which only adjusts a
+threshold).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 PAPER.md §7.1's remark.
 
