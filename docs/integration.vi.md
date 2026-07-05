@@ -146,7 +146,10 @@ phân-phối-tự-do ≥ 1−α thay cho precision cứng — xem `PAPER.md` §7
   cách viết một entity (`"Bob"` vs `"bob"`), một đường chứng minh đúng có thể bị đứt
   âm thầm. Dùng `GroundedReasoner(normalize=lambda s: s.strip().casefold())` để gộp
   các biến thể cách viết lại (tắt mặc định, vì hoa/thường đôi khi có ý nghĩa ngữ nghĩa
-  riêng tùy domain).
+  riêng tùy domain). Precision=1.0 giữ *đúng* nguyên vẹn chừng nào `normalize` không
+  bao giờ gộp nhầm 2 entity thật sự khác nhau — đó là cách duy nhất nó có thể sai
+  (Định lý N) — nên đó chính xác là điều `gr.calibrate_normalization(labeled_pairs)`
+  đo được từ dữ liệu giữ riêng ra thay vì giả định (xem `PAPER.md` §5.3.3).
 - **`via=rel` giả định `rel` thực sự bắc cầu trong thực tế**, không chỉ trong đồ thị
   được cấp. Áp dụng cho quan hệ chỉ bắc cầu một phần/có điều kiện (ví dụ "trusts") vẫn
   cho ra `grounded=True` một cách tự tin nhưng trả lời sai câu hỏi. Dùng

@@ -228,6 +228,45 @@ class GroundedReasoner:
         ]
         return calibrate_transitivity(grounded_pairs, ground_truth, alpha=alpha)
 
+    def calibrate_normalization(
+        self, labeled_pairs: list[tuple[str, str, bool]], alpha: float = 0.1
+    ) -> dict:
+        """
+        Calibrate confidence that THIS reasoner's `normalize=` never merges two
+        distinct real-world entities (Theorem N). Precision=1.0 (Theorem G) is
+        preserved EXACTLY as long as `normalize` only merges true aliases of the
+        same entity — the only way it can break is an over-merge, so that is
+        exactly what this calibrates, from held-out evidence rather than trust.
+
+        `labeled_pairs`: (a, b, is_same_entity) triples where `is_same_entity`
+        is known INDEPENDENTLY of `normalize` (e.g. human-verified) — NOT
+        derived from it. Only pairs `normalize` actually MERGES (`_norm(a) ==
+        _norm(b)`, and `a != b` as raw strings) are scored; these must be
+        held-out data, not the pairs you intend to trust the bound for.
+
+        Returns {n_grounded, n_confirmed, precision_lower_bound, alpha} (same
+        shape as `calibrate_transitivity`, reusing the identical Clopper-Pearson
+        machinery — n_grounded/n_confirmed here count MERGES, not grounded
+        claims): with confidence >= 1-alpha, at least `precision_lower_bound`
+        of this normalizer's merges are correct (Theorem N;
+        `grounded_reasoning/reasoning/transitivity_calibration.py`).
+
+        Raises ValueError if `normalize=` was not set at construction — there's
+        nothing to calibrate for the default (exact-string, always-safe) case.
+        """
+        if self._normalize is None:
+            raise ValueError(
+                "calibrate_normalization requires normalize= to be set at construction "
+                "(the default, exact-string matching, never over-merges — nothing to calibrate)"
+            )
+        from grounded_reasoning.reasoning.transitivity_calibration import calibrate_transitivity
+
+        ground_truth = {(a, b): truth for a, b, truth in labeled_pairs}
+        merged_pairs = [
+            (a, b) for a, b, _ in labeled_pairs if a != b and self._norm(a) == self._norm(b)
+        ]
+        return calibrate_transitivity(merged_pairs, ground_truth, alpha=alpha)
+
     # -- soundness / contradictions ----------------------------------------------
     def contradictions(self, relation: str) -> list[list[str]]:
         """

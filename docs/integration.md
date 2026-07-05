@@ -151,7 +151,11 @@ grounded = [c for c, v in gr.filter_claims(llm_claims) if v.grounded]
   that's inconsistent about one entity's surface form (`"Bob"` vs `"bob"`) silently
   breaks an otherwise-true proof path. Pass `GroundedReasoner(normalize=lambda s:
   s.strip().casefold())` to fold surface-form variants together (off by default,
-  since case can be semantically meaningful in some domains).
+  since case can be semantically meaningful in some domains). Precision=1.0 stays
+  *exactly* intact as long as `normalize` never merges two genuinely distinct
+  entities — that's the only way it can break (Theorem N) — so that's exactly
+  what `gr.calibrate_normalization(labeled_pairs)` measures from held-out
+  evidence instead of assuming (see `PAPER.md` §5.3.3).
 - **`via=rel` assumes `rel` is genuinely transitive in reality**, not just in the
   supplied graph. Composing a partially/conditionally transitive relation (e.g.
   "trusts") still returns a confident `grounded=True` that answers a different

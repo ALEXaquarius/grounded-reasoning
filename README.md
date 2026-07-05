@@ -76,9 +76,14 @@ under the rug:
   inconsistent about one entity's surface form (`"Bob"` vs `"bob"`), the graph
   treats them as two nodes and a real path silently breaks — the guard then
   (correctly, per its own contract) rejects a claim that is actually true.
-  Fix: `GroundedReasoner(normalize=lambda s: s.strip().casefold())` folds
-  surface-form variants together before they become graph keys; proofs still
-  display each entity's original first-seen spelling.
+  Fix (binary): `GroundedReasoner(normalize=lambda s: s.strip().casefold())`
+  folds surface-form variants together before they become graph keys; proofs
+  still display each entity's original first-seen spelling. **Theorem N**
+  characterizes exactly when this is safe: precision stays *exactly* 1.0 as
+  long as `normalize` never merges two genuinely distinct entities — that's
+  the *only* way it can go wrong, so it's exactly what
+  `gr.calibrate_normalization(labeled_pairs)` measures from held-out evidence,
+  reusing the same Clopper-Pearson machinery as Theorem M.
 - **Theorem G doesn't know if `via` is transitive in reality.** It guarantees
   "a path exists under the closure of `via`," not "`via` actually composes in
   the world." Compose a relation that's only partially/conditionally
@@ -96,9 +101,10 @@ under the rug:
 
 Both opt-in guards are off by default (identical behavior to previous
 releases). Reproductions: `tests/test_agent.py::TestEntityNormalization`,
-`::TestTransitiveRelationsGuard`, `::TestTransitivityCalibration`; the A/B
-comparison against the binary guard:
-[`transitivity_calibration_eval.py`](grounded_reasoning/experiments/transitivity_calibration_eval.py).
+`::TestTransitiveRelationsGuard`, `::TestTransitivityCalibration`,
+`::TestNormalizationCalibration`; the A/B comparisons:
+[`transitivity_calibration_eval.py`](grounded_reasoning/experiments/transitivity_calibration_eval.py),
+[`normalization_calibration_eval.py`](grounded_reasoning/experiments/normalization_calibration_eval.py).
 
 ### How this differs from the usual fixes
 
@@ -125,14 +131,16 @@ The reasoning core rests on a single unification (numerically verified, zero err
 
 ⟹ fuzzy inference **is** spectral analysis of the relation operator. `grounded_reasoning/reasoning/`.
 
-Five further theorems extend this core: **I** (two-sided precision/recall guarantee
+Six further theorems extend this core: **I** (two-sided precision/recall guarantee
 for a self-grounded, no-external-KB variant), **J** (closure-learning completeness,
 validated on CLUTRR), **K** (conformal reasoning — distribution-free coverage under a
 *noisy* relation graph, including one extracted by an LLM from raw text), **L**
-(Horn forward-chaining, generalizing transitive closure to conjunctive rules), and
+(Horn forward-chaining, generalizing transitive closure to conjunctive rules),
 **M** (empirical transitivity calibration — a Clopper-Pearson confidence bound
-replacing a blind transitivity assumption with a measured one). All
-eight are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
+replacing a blind transitivity assumption with a measured one), and **N**
+(normalization precision isolation — precision=1.0 breaks only via an
+over-merge, and *only* that is what needs calibrating). All
+nine are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
 
 ---
 
@@ -240,10 +248,10 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/conformal_reasoning.py` | Conformal — coverage guarantee under noise (Theorem K) |
 | `grounded_reasoning/reasoning/composition_algebra.py` | Composition-table learning, validated on CLUTRR (Theorem J) |
 | `grounded_reasoning/reasoning/horn.py` | Horn forward-chaining, least-model semantics (Theorem L) |
-| `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration for the transitivity assumption (Theorem M) |
+| `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration — reused for both the transitivity assumption (Theorem M) and the normalization over-merge risk (Theorem N) |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
-| `grounded_reasoning/theory/theorems.py` | **Eight theorems (F–M)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
+| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo |
 | `examples/quickstart.ipynb` | Runnable tour of the library (offline, Colab-ready) |
 

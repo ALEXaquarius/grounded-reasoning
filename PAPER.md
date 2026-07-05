@@ -18,12 +18,13 @@ no external knowledge base (Theorem I), and a **conformal** extension giving
 noisy — including end-to-end on a graph extracted by an LLM from raw text
 (Theorem K). The system is validated on the public **CLUTRR** benchmark, where
 the grounded solver holds ~100% accuracy flat across 2–10 composition hops
-while DeepSeek's accuracy falls from 83% to 8%. Eight theorems are stated,
-proved, and numerically verified — including a Clopper-Pearson calibration
-(Theorem M) that replaces a blind transitivity assumption with a measured
-confidence bound; every claim distinguishes what is genuinely new (a
-unification, a measured guarantee, a described failure boundary) from what is
-classical mathematics applied honestly (Katz index, Neumann series, conformal
+while DeepSeek's accuracy falls from 83% to 8%. Nine theorems are stated,
+proved, and numerically verified — including a pair of Clopper-Pearson
+calibrations (Theorems M and N) that replace two blind modeling assumptions
+(transitivity, and entity-normalization safety) with measured confidence
+bounds; every claim distinguishes what is genuinely new (a unification, a
+measured guarantee, a described failure boundary) from what is classical
+mathematics applied honestly (Katz index, Neumann series, conformal
 prediction, Clopper-Pearson intervals, Horn logic).
 
 ---
@@ -69,13 +70,14 @@ Contributions:
    (33% → 100% precision).
 3. **A falsifiable boundary** — a description, backed by experiments, of where
    LLM multi-hop reasoning holds versus collapses.
-4. **Eight theorems (F–M)**, each with numerical verification
+4. **Nine theorems (F–N)**, each with numerical verification
    (`grounded_reasoning/theory/theorems.py`, exercised by `tests/`), including **Theorem I**
    — a two-sided precision *and* recall guarantee for a self-grounded variant
    that needs no external knowledge base — **Theorem K**, a conformal
    extension with a distribution-free coverage guarantee under a noisy,
-   LLM-extracted graph — and **Theorem M**, a Clopper-Pearson calibration
-   replacing a blind transitivity assumption with a measured confidence bound.
+   LLM-extracted graph — and **Theorems M/N**, a pair of Clopper-Pearson
+   calibrations replacing two blind modeling assumptions (transitivity,
+   entity-normalization safety) with measured confidence bounds.
 
 The letter labels (F–L) are kept as-is from the project's internal numbering,
 where A–E were unrelated retrieval theorems not included in this repository.
@@ -98,9 +100,10 @@ where A–E were unrelated retrieval theorems not included in this repository.
 - **Horn logic / Datalog forward-chaining**: classical least-model semantics,
   generalizing the transitive-closure guard to conjunctive rule bodies.
 - **Clopper-Pearson intervals** (Clopper & Pearson, 1934): the classical exact
-  confidence interval for a binomial proportion. Applied here (§5.3.2,
-  Theorem M) to calibrate confidence in the transitivity assumption itself,
-  from held-out labeled pairs.
+  confidence interval for a binomial proportion. Applied here to calibrate
+  confidence in two modeling assumptions from held-out labeled pairs: the
+  transitivity assumption itself (§5.3.2, Theorem M) and the safety of an
+  entity-normalization function (§5.3.3, Theorem N).
 - **CLUTRR** (Sinha et al., EMNLP 2019): a public kinship-reasoning benchmark
   used here for a genuinely comparable, third-party evaluation.
 - **Self-consistency** (Wang et al.) and **Chain-of-Verification**: sampling
@@ -404,6 +407,64 @@ everything — the same qualitative move as trading the hard guard (§5.3) for
 conformal coverage (§7.1) under a noisy graph, applied here to a noisy
 *assumption* instead of a noisy *graph*.
 
+**5.3.3 Closing the other boundary — Theorem N.** §5.3.1's first boundary
+(entity identity) was fixed with an opt-in `normalize=` hook, but — unlike
+transitivity — the precise conditions under which that hook preserves
+Theorem G's guarantee had not been characterized. It can be, exactly:
+
+> **Theorem N** (Normalization Precision Isolation, numerically verified over
+> 60 random trials, `tests/test_theorems.py::test_normalization_precision_isolation`,
+> `grounded_reasoning/theory/theorems.py`): let entities `E` each have one or
+> more raw surface-form aliases (`alias: Alias → E`, not necessarily
+> injective), and let a normalizer `σ` compose with `alias` to give
+> `τ = σ ∘ alias : E → Keys`.
+> 1. **Safety preserves precision exactly.** If `τ` is injective (`σ` never
+>    maps two *distinct* true entities to the same key — it only ever merges
+>    aliases of the *same* entity), precision remains exactly 1.0, identical
+>    to no normalization at all.
+> 2. **Safety implies recall is monotonically non-decreasing** relative to no
+>    normalization: every true path found without normalization is still
+>    found with it, and previously-fragmented aliases of the same entity may
+>    now connect facts that raw string matching couldn't.
+> 3. **Over-merging is the *only* way precision can break**, and when it does,
+>    the false-positive's witnessing proof path necessarily passes through
+>    the over-merged key — the failure is localized, not scattered.
+
+Proof: (1)+(2) an injective `τ` makes the keyed graph isomorphic, as a
+reachability structure, to the graph on the true entities `E` with
+inconsistent-alias edges unified onto their single true endpoint — unifying
+aliases of the *same* node can only merge previously-split adjacency lists
+(weakly increasing reachability), and a graph isomorphism cannot manufacture
+a path between two nodes that had none. (3) if `τ` merges `e1 ≠ e2` into key
+`k`, anything reachable from `e1`'s aliases becomes reachable from `e2`'s
+aliases through `k` and vice versa; a false positive requires exactly this,
+so the returned proof necessarily contains `k`. QED (graph reachability under
+a quotient map — classical; the contribution is diagnosing precisely where
+`normalize=` can and cannot break Theorem G, mirroring §5.3.2's treatment of
+the *other* boundary).
+
+**The measured counterpart** — `gr.calibrate_normalization(labeled_pairs)` —
+reuses Theorem M's identical Clopper-Pearson machinery, applied to a
+different empirical question: not "is this composed claim true" but "does
+this normalizer's merge decision agree with independently-known ground
+truth." From held-out `(a, b, is_same_entity)` triples, it tallies the pairs
+`normalize` actually merges and computes an exact lower confidence bound on
+how many of those merges are correct — the *only* quantity Theorem N says can
+possibly be at risk.
+
+**A/B/C comparison** (`grounded_reasoning/experiments/normalization_calibration_eval.py`,
+fully offline, synthetic ground truth): 120 entities with realistic
+inconsistent aliasing, plus a small number of deliberately injected
+accidental collisions (a realistic fuzzy-resolver failure mode) —
+
+| | False positives | Risk reported |
+|---|---:|---|
+| A. No normalization | 0 (always) | — (but misses fragmented paths) |
+| B. Fuzzy resolver, trusted blindly | several | **none** |
+| **C. Same resolver, calibrated** | — | **yes** — merge precision ≥ 70–85% (90% confidence), held on a fresh held-out set across every seed tested |
+
+Same resolver as B; C is the only one that tells you how much to trust it.
+
 **5.4 Directions to falsify or extend.** (i) Extract a grounded graph from a
 trustworthy non-LLM source and measure the guard end-to-end. (ii) Test on
 relations with cycles (ρ ≥ 1), where closure requires `α < 1/ρ`. (iii) Search
@@ -575,8 +636,8 @@ omnipotent oracle.
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
 - Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,nl_ontology_eval,guard_cost_eval,inference_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
-- Offline-only experiment: `grounded_reasoning/experiments/transitivity_calibration_eval.py` (synthetic ground truth, no LLM call)
-- Eight theorems (F–M): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
+- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{transitivity_calibration_eval,normalization_calibration_eval}.py`
+- Nine theorems (F–N): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
   invariant has a deterministic offline lock). Real-LLM experiments need
   `DEEPSEEK_API_KEY` (or another supported provider) to run live.

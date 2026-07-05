@@ -9,6 +9,7 @@ from grounded_reasoning.theory.theorems import (
     theorem_conformal_reasoning,
     theorem_fuzzy_inference,
     theorem_horn_least_model,
+    theorem_normalization_precision_isolation,
     theorem_operator_compositional_equivalence,
     theorem_relation_spectrum,
     theorem_sgdc_recall_bound,
@@ -86,3 +87,11 @@ def test_transitivity_calibration_coverage(theorem_results):
     assert r["empirical_coverage"] >= r["target_coverage"] - 0.02
     assert r["zero_evidence_gives_zero_bound"]  # k=0 -> bound=0.0, never overconfident
     assert r["full_evidence_bound_below_one"]   # k=n -> bound<1.0, never claims certainty
+
+
+def test_normalization_precision_isolation(theorem_results):
+    r = theorem_results[theorem_normalization_precision_isolation]
+    assert r["safe_false_positives"] == 0
+    assert r["safe_recall_regressions"] == 0
+    assert r["unsafe_false_positives_not_through_merged_key"] == 0
+    assert r["unsafe_trials_with_a_false_positive"] > 0  # the phenomenon actually occurs

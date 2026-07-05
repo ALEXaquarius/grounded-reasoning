@@ -4,6 +4,38 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.6 — Theorem N: closing the other boundary (entity normalization)
+
+0.1.4 fixed the entity-identity gap (§5.3.1) with an opt-in `normalize=` hook,
+but never characterized exactly when it's safe. Theorem N does, and — mirroring
+0.1.5's treatment of transitivity — reuses the same Clopper-Pearson machinery
+to make that safety measurable instead of assumed.
+
+### Added
+
+- **Theorem N (Normalization Precision Isolation)**, numerically verified
+  (`theorem_normalization_precision_isolation`, `tests/test_theorems.py`, 60
+  random trials): a normalizer that never merges two genuinely distinct
+  entities preserves precision=1.0 *exactly* and never regresses recall;
+  over-merging is the *only* way precision can break, and when it does, the
+  false-positive's proof path always passes through the over-merged key.
+- **`GroundedReasoner.calibrate_normalization(labeled_pairs, alpha=0.1)`** —
+  the measured counterpart: calibrates a Clopper-Pearson lower confidence
+  bound on how many of a normalizer's actual merges are correct, from
+  held-out `(a, b, is_same_entity)` triples. Reuses the identical calibration
+  engine built for Theorem M (`transitivity_calibration.py`), applied to a
+  different empirical question. Raises `ValueError` if `normalize=` wasn't
+  set — there's nothing to calibrate for the default (always-safe,
+  exact-string) case.
+- **`grounded_reasoning/experiments/normalization_calibration_eval.py`** — a
+  fully offline A/B/C comparison (synthetic ground truth): no normalization
+  (0 false positives, always, but misses fragmented paths) vs. a fuzzy
+  resolver trusted blindly (several false positives, no risk reported) vs.
+  the same resolver calibrated (merge precision reported and held on a
+  held-out test set across every seed tested).
+- README.md/README.vi.md and PAPER.md §5.3.3 document the theorem, proof, and
+  A/B/C comparison.
+
 ## 0.1.5 — Theorem M: a measured alternative to the binary transitivity guard
 
 0.1.4 closed the transitivity gap (§5.3.1) with a binary allowlist,

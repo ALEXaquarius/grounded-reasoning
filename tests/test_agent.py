@@ -237,3 +237,48 @@ class TestTransitivityCalibration:
         gr.add_facts([("A1", "trusts", "B1"), ("b1", "trusts", "C1")])
         res = gr.calibrate_transitivity("trusts", [("A1", "C1", True)], alpha=0.1)
         assert res["n_grounded"] == 1
+
+
+class TestNormalizationCalibration:
+    """Theorem N: precision=1.0 breaks only via an over-merge, and that specific
+    risk is exactly what calibrate_normalization measures from held-out data."""
+
+    def test_requires_normalize_to_be_set(self):
+        gr = GroundedReasoner()  # normalize=None (default)
+        try:
+            gr.calibrate_normalization([("Bob", "bob", True)])
+            assert False, "expected ValueError without normalize= set"
+        except ValueError as e:
+            assert "normalize" in str(e)
+
+    def test_all_merges_correct_gives_a_high_but_not_perfect_bound(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        labeled = [("Bob", "bob", True), ("Alice", "alice", True),
+                   ("Carol", "carol", True), ("Dave", "dave", True)]
+        res = gr.calibrate_normalization(labeled, alpha=0.1)
+        assert res["n_grounded"] == 4 and res["n_confirmed"] == 4
+        assert 0.0 < res["precision_lower_bound"] < 1.0  # never claims certainty from n=4
+
+    def test_an_over_merge_lowers_the_bound(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        # "Bob"/"bob" are truly the same person; "Rob"/"rob" are NOT (casefold
+        # over-merges them) -- known independently, not derived from normalize()
+        labeled = [("Bob", "bob", True), ("Alice", "alice", True),
+                   ("Rob", "rob", False), ("Carol", "carol", True)]
+        res = gr.calibrate_normalization(labeled, alpha=0.1)
+        assert res["n_grounded"] == 4 and res["n_confirmed"] == 3
+        assert res["precision_lower_bound"] < 0.75
+
+    def test_pairs_normalize_does_not_merge_are_excluded(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        # "Bob" vs "Alice" -- normalize does NOT merge these (different keys),
+        # so this pair says nothing about merge correctness and must be excluded
+        labeled = [("Bob", "bob", True), ("Bob", "Alice", False)]
+        res = gr.calibrate_normalization(labeled, alpha=0.1)
+        assert res["n_grounded"] == 1 and res["n_confirmed"] == 1
+
+    def test_identical_strings_are_not_counted_as_a_merge(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        labeled = [("Bob", "Bob", True)]  # same raw string, not a surface-form merge
+        res = gr.calibrate_normalization(labeled, alpha=0.1)
+        assert res["n_grounded"] == 0

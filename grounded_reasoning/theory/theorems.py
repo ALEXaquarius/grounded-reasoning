@@ -747,6 +747,167 @@ def theorem_transitivity_calibration(seed: int = 0) -> dict:
     }
 
 
+def theorem_normalization_precision_isolation(seed: int = 0) -> dict:
+    """
+    THEOREM N (Normalization Precision Isolation). `GroundedReasoner(normalize=...)`
+    (see agent/verifier.py's module docstring, boundary 1) folds surface-form
+    variants of an entity together before they become graph keys. This theorem
+    characterizes EXACTLY when that preserves Theorem G's precision=1.0
+    guarantee, and exactly what breaks it when it doesn't.
+
+    Setup: true entities E, each with one or more raw surface-form aliases
+    (`alias: Alias -> E`, not necessarily injective — an LLM extraction may use
+    several spellings for the same real thing). A normalizer sigma composed
+    with alias gives tau = sigma o alias : E -> Keys.
+
+      (1) SAFE (tau injective — sigma never maps two DISTINCT true entities to
+          the same key): precision remains EXACTLY 1.0 (identical to no
+          normalization) — merging only ALIASES of the same entity cannot
+          create a path between two entities that weren't really connected,
+          it can only reveal paths that raw string-matching fragmented across
+          inconsistent spellings.
+      (2) SAFE implies RECALL is monotonically non-decreasing versus no
+          normalization: every true path found without normalization is still
+          found with it (merging never removes an edge), and additional true
+          paths may now be found across previously-fragmented aliases.
+      (3) UNSAFE (tau not injective — two distinct true entities e1!=e2 share a
+          key): a false positive becomes POSSIBLE, and when one occurs, the
+          witnessing proof path passes through the merged key — precision loss
+          is localized to the over-merged identities, not distributed
+          elsewhere in the graph.
+
+    Proof: (1)+(2) tau injective means the quotient graph (keyed by tau) is
+    isomorphic, as a reachability structure, to the graph on the TRUE entities
+    E with any inconsistent-alias edges unified onto their single true
+    endpoint — a graph automorphism cannot introduce a path between two nodes
+    that had none, and unifying aliases of the same source/target node can
+    only merge previously-split adjacency lists, i.e. weakly increase
+    reachability. (3) if tau merges e1!=e2 into key k, any edge incident to
+    e1's aliases becomes reachable from e2's aliases through k and vice versa;
+    a false positive requires exactly this — some other entity becomes
+    (spuriously) reachable from x only via the shared key k, i.e. the proof
+    path returned necessarily contains k. QED (graph reachability under a
+    quotient map; classical, the contribution is the diagnosis of exactly
+    where a normalize= hook can and cannot break Theorem G).
+
+    Verification: random true-entity DAGs with randomized multi-alias surface
+    forms and randomized fact ordering (simulating inconsistent LLM
+    extraction), checked against a SAFE normalizer (an alias->true-entity
+    oracle) for zero false positives and non-decreasing recall, and against a
+    deliberately UNSAFE normalizer (merging two randomly chosen distinct true
+    entities) for the predicted false positive whose proof path contains the
+    merged key.
+    """
+    import random
+
+    from grounded_reasoning.agent import GroundedReasoner
+
+    rng = random.Random(seed)
+    trials = 60
+    safe_false_positives = 0
+    safe_recall_regressions = 0
+    unsafe_fp_without_merged_key = 0
+    unsafe_fp_trials_with_a_false_positive = 0
+
+    for t in range(trials):
+        n = rng.randint(10, 20)
+        entities = [f"e{t}_{i}" for i in range(n)]
+        aliases = {
+            e: list({e, e.upper(), " " + e, e + "_x"})[: rng.randint(1, 4)] for e in entities
+        }
+        true_edges = [(entities[rng.randint(0, i - 1)], entities[i]) for i in range(1, n)]
+
+        adj: dict[str, set[str]] = {}
+        for a, b in true_edges:
+            adj.setdefault(a, set()).add(b)
+
+        def true_closure(x, adj=adj):
+            seen, frontier = set(), list(adj.get(x, ()))
+            while frontier:
+                nf = []
+                for u in frontier:
+                    if u not in seen:
+                        seen.add(u)
+                        nf += list(adj.get(u, ()))
+                frontier = nf
+            return seen
+
+        def alias_of(e):
+            return rng.choice(aliases[e])
+
+        facts = [(alias_of(a), "parent", alias_of(b)) for a, b in true_edges]
+
+        alias_to_true = {al: e for e, als in aliases.items() for al in als}
+        gr_safe = GroundedReasoner(normalize=lambda s: alias_to_true.get(s, s))
+        gr_safe.add_facts(facts)
+        gr_none = GroundedReasoner()
+        gr_none.add_facts(facts)
+
+        for a in entities:
+            for b in entities:
+                if a == b:
+                    continue
+                truly_related = b in true_closure(a)
+                v_safe = gr_safe.verify(a, b, via="parent").grounded
+                v_none = gr_none.verify(a, b, via="parent").grounded
+                if v_safe and not truly_related:
+                    safe_false_positives += 1
+                if v_none and not v_safe:  # recall must never REGRESS under a safe normalizer
+                    safe_recall_regressions += 1
+
+        # (3) an UNSAFE normalizer: otherwise-safe (resolves every alias to its
+        # true entity, same as the oracle above) but with exactly ONE forced
+        # over-merge error between two distinct, randomly chosen true entities
+        # -- simulating a real entity-resolver that's almost entirely correct.
+        e1, e2 = rng.sample(entities, 2)
+
+        def unsafe_normalize(s, alias_to_true=alias_to_true, e1=e1, e2=e2):
+            resolved = alias_to_true.get(s, s)
+            return "MERGED" if resolved in (e1, e2) else resolved
+
+        gr_unsafe = GroundedReasoner(normalize=unsafe_normalize)
+        gr_unsafe.add_facts(facts)
+        found_fp = False
+        for a in entities:
+            for b in entities:
+                if a == b:
+                    continue
+                truly_related = b in true_closure(a)
+                v = gr_unsafe.verify(a, b, via="parent")
+                if v.grounded and not truly_related:
+                    found_fp = True
+                    if not any(unsafe_normalize(x) == "MERGED" for x in (v.proof or [])):
+                        unsafe_fp_without_merged_key += 1
+        if found_fp:
+            unsafe_fp_trials_with_a_false_positive += 1
+
+    ok = (
+        safe_false_positives == 0
+        and safe_recall_regressions == 0
+        and unsafe_fp_without_merged_key == 0
+        and unsafe_fp_trials_with_a_false_positive > 0  # the unsafe case must actually bite sometimes
+    )
+    return {
+        "theorem": "N_NORMALIZATION_PRECISION_ISOLATION",
+        "trials": trials,
+        "safe_false_positives": safe_false_positives,
+        "safe_recall_regressions": safe_recall_regressions,
+        "unsafe_false_positives_not_through_merged_key": unsafe_fp_without_merged_key,
+        "unsafe_trials_with_a_false_positive": unsafe_fp_trials_with_a_false_positive,
+        "conclusion": (
+            "CONFIRMED: a safe normalizer (never merges distinct true entities) gives "
+            "zero false positives and no recall regressions; an unsafe one's false "
+            "positives always pass through the over-merged key"
+            if ok
+            else (
+                f"VIOLATED: safe_fp={safe_false_positives} safe_regress={safe_recall_regressions} "
+                f"unsafe_fp_not_via_merge={unsafe_fp_without_merged_key} "
+                f"unsafe_trials_with_fp={unsafe_fp_trials_with_a_false_positive}"
+            )
+        ),
+    }
+
+
 ALL_THEOREMS = [
     theorem_fuzzy_inference,
     theorem_operator_compositional_equivalence,
@@ -756,4 +917,5 @@ ALL_THEOREMS = [
     theorem_conformal_reasoning,
     theorem_horn_least_model,
     theorem_transitivity_calibration,
+    theorem_normalization_precision_isolation,
 ]

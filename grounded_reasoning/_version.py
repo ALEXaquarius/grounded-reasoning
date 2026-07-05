@@ -6,4 +6,4 @@ static analysis (pyproject.toml's `[tool.setuptools.dynamic]` attr directive)
 without executing the rest of the package or requiring its dependencies to be
 installed yet.
 """
-__version__ = "0.1.5"
+__version__ = "0.1.6"
