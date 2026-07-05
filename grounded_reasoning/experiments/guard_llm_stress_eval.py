@@ -142,10 +142,21 @@ def _grounded(alg, kind, person, cand) -> bool:
 
 
 def run(seeds=range(5), n: int = 48, temperature: float = 0.7,
-        model: str = "deepseek-chat", verbose: bool = True):
+        model: str = "deepseek-chat", timeout: float = 180.0,
+        max_queries_per_trial: int | None = None, verbose: bool = True):
+    """
+    timeout: reasoning ("thinking") models can take much longer per call than
+    a plain chat model — bump this if the model in use has extended thinking
+    enabled, or calls may time out mid-run.
+    max_queries_per_trial: if set, subsamples each trial's query list down to
+    this many questions (ALWAYS keeping every guaranteed-empty trap query,
+    since those are the cheapest, highest-signal hallucination check) — use
+    this to keep a live run's wall-clock time bounded when each LLM call is
+    slow, at the cost of a smaller sample.
+    """
     from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
-    client = DeepSeekClient(model=model)
+    client = DeepSeekClient(model=model, timeout=timeout)
     llm_tp = llm_fp = llm_fn = 0
     g_tp = g_fp = g_fn = 0
     guard_dropped_true = 0
@@ -158,6 +169,12 @@ def run(seeds=range(5), n: int = 48, temperature: float = 0.7,
         queries = make_queries(alg, names, roots)
         rng = random.Random(seed)
         text = render_facts(facts, siblings, spouses, rng)
+
+        if max_queries_per_trial is not None and len(queries) > max_queries_per_trial:
+            traps = [q for q in queries if q[1] in roots and not q[2]]
+            rest = [q for q in queries if not (q[1] in roots and not q[2])]
+            budget = max(0, max_queries_per_trial - len(traps))
+            queries = traps + rng.sample(rest, k=min(budget, len(rest)))
 
         for kind, person, truth in queries:
             n_queries += 1
