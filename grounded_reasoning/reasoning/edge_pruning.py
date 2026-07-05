@@ -81,6 +81,8 @@ removed edge might have been needed after all.
 """
 from __future__ import annotations
 
+import random
+
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 
 
@@ -146,3 +148,44 @@ def prune_edges(
 ) -> list[tuple[str, str]]:
     """Returns `edges` with every edge in `blocked` removed."""
     return [e for e in edges if e not in blocked]
+
+
+def identify_and_prune_edges(
+    edges: list[tuple[str, str]],
+    labeled_pairs: list[tuple[str, str, bool]],
+    identify_frac: float = 0.85,
+    min_evidence: int = 2,
+    walk_len: int = 8,
+    alpha: float = 0.6,
+    seed: int | None = None,
+) -> tuple[list[tuple[str, str]], set[tuple[str, str]], list[tuple[str, str, bool]]]:
+    """
+    Convenience wrapper applying the measured-safest configuration by
+    default -- `identify_frac=0.85, min_evidence=2`, found by the Pareto
+    sweep in the module docstring (pooled wrongly-blocked rate 1.5-4.2%,
+    95% upper bound 2.6-8.9%, vs. 13-32% at `identify_frac=0.5,
+    min_evidence=1`). Splits `labeled_pairs` into an identification share
+    and a reserved share, calls `identify_suspect_edges` on the
+    identification share only, prunes the result, and returns
+    `(cleaned_edges, blocked_edges, reserved_pairs)`.
+
+    `reserved_pairs` is disjoint from whatever was used to decide removal,
+    so it's safe to use to independently evaluate the cleaned graph (the
+    same role `eval_candidates` plays in `edge_pruning_eval.py`) --
+    scoring the cleaned graph on `identify_pairs` instead would be
+    circular, since that's the same evidence used to decide what to
+    remove.
+
+    `seed` controls the random split (a plain `random.Random` seed); pass
+    an explicit int for a reproducible split.
+    """
+    rng = random.Random(seed)
+    shuffled = list(labeled_pairs)
+    rng.shuffle(shuffled)
+    split = int(len(shuffled) * identify_frac)
+    identify_pairs, reserved_pairs = shuffled[:split], shuffled[split:]
+    blocked = identify_suspect_edges(
+        edges, identify_pairs, walk_len=walk_len, alpha=alpha, min_evidence=min_evidence
+    )
+    cleaned = prune_edges(edges, blocked)
+    return cleaned, blocked, reserved_pairs

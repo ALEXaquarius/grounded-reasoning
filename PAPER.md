@@ -863,10 +863,15 @@ simpler rule is verified, not an oversight.
 
 **Verdict: the residual risk, bounded and quantified this way, is small
 enough relative to the FPR reduction retained in every regime to keep the
-feature** — with `identify_frac=0.85, min_evidence=2` as the recommended
-(not yet default, to preserve backward compatibility) configuration
-wherever a wrongly-removed edge is more costly than a slower cleaning rate.
-(2) It costs real recall regardless of configuration — any true claim
+feature** — with `identify_frac=0.85, min_evidence=2` as the default of a
+new convenience entry point, `identify_and_prune_edges` (splits
+`labeled_pairs`, identifies, prunes, and returns the untouched reserved
+share for independent evaluation, in one call). The lower-level
+`identify_suspect_edges` keeps its original `min_evidence=1` default —
+unchanged, so existing callers of that primitive see no behavior change —
+while the new wrapper makes the measured-safest configuration the path of
+least resistance for anyone starting fresh. (2) It costs real recall
+regardless of configuration — any true claim
 depending solely on a removed edge loses that path (visible above as the
 small coverage shifts between raw and cleaned); (3) it edits the graph in
 place, a one-way structural change, unlike calibration (which only adjusts

@@ -258,13 +258,13 @@ fails when a good edge shares a path with a genuinely bad one. Cost of the
 shipped mitigation: cleaned FPR rises somewhat (e.g. ~49% → ~59% in the
 dropout-dominant regime, still far below the 77% raw baseline), and the
 reserved evaluation set shrinks further. **Verdict: kept, with this
-configuration recommended** wherever a wrongly-removed edge is costlier
-than a slower cleaning rate — the residual risk is now bounded and
-quantified rather than left as "could in principle happen." It also costs
-real recall for any true claim that depended solely on a removed edge, and
-it edits the graph in
-place (a one-way change, unlike calibration which only adjusts a
-threshold).
+configuration as the default** — `identify_and_prune_edges` (same module)
+applies it automatically (splits `labeled_pairs`, identifies, prunes, and
+hands back the untouched reserved share for independent evaluation) so it's
+the path of least resistance, not something you have to remember to
+configure. It also costs real recall for any true claim that depended
+solely on a removed edge, and it edits the graph in place (a one-way
+change, unlike calibration which only adjusts a threshold).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 PAPER.md §7.1's remark.
 

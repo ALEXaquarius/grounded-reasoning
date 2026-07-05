@@ -4,7 +4,11 @@ and edge_pruning_eval.py's A/B comparison. Fully synthetic, no
 LLM/network needed.
 """
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
-from grounded_reasoning.reasoning.edge_pruning import identify_suspect_edges, prune_edges
+from grounded_reasoning.reasoning.edge_pruning import (
+    identify_and_prune_edges,
+    identify_suspect_edges,
+    prune_edges,
+)
 from grounded_reasoning.experiments.edge_pruning_eval import (
     run,
     run_mitigation_comparison,
@@ -96,3 +100,31 @@ def test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate():
         assert safer["wrongly_blocked_upper_bound"] < 0.15, f"{regime}: {safer}"
         # the mitigation still cleans meaningfully, just less aggressively
         assert safer["cleaned_fpr"] < safer["raw_fpr"], f"{regime}: {safer}"
+
+
+def test_identify_and_prune_edges_splits_without_overlap_or_loss():
+    edges = [("a", "b"), ("b", "c"), ("x", "y")]
+    labeled = [("a", "c", True), ("x", "y", False), ("a", "b", True), ("b", "c", True)]
+    cleaned, blocked, reserved = identify_and_prune_edges(edges, labeled, seed=0)
+    # every input pair ends up in exactly the reserved set or was consumed
+    # for identification -- none dropped, none duplicated
+    assert len(reserved) == len(labeled) - int(len(labeled) * 0.85)
+    assert set(reserved) <= set(labeled)
+    assert cleaned == prune_edges(edges, blocked)
+
+
+def test_identify_and_prune_edges_default_config_matches_documented_recommendation():
+    # the defaults ARE the measured-safest configuration, not left for the
+    # caller to remember and pass explicitly each time
+    import inspect
+    sig = inspect.signature(identify_and_prune_edges)
+    assert sig.parameters["identify_frac"].default == 0.85
+    assert sig.parameters["min_evidence"].default == 2
+
+
+def test_identify_and_prune_edges_is_deterministic_given_a_seed():
+    edges = [("a", "b"), ("b", "c"), ("x", "y"), ("y", "z")]
+    labeled = [("a", "c", True), ("x", "z", False)] * 5
+    r1 = identify_and_prune_edges(edges, labeled, seed=42)
+    r2 = identify_and_prune_edges(edges, labeled, seed=42)
+    assert r1 == r2

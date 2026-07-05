@@ -258,12 +258,13 @@ của nó không đúng khi một cạnh tốt tình cờ dùng chung đường 
 cạnh xấu thật sự. Đánh đổi của cách đã chọn: FPR sau khi làm sạch tăng nhẹ
 (VD ~49% → ~59% ở mức dropout-dominant, vẫn thấp hơn nhiều so với 77% ban
 đầu), và tập đánh giá giữ riêng nhỏ hơn nữa. **Kết luận: giữ lại tính
-năng, khuyến nghị dùng cấu hình này** ở bất kỳ đâu mà xóa nhầm một cạnh
-đúng tốn kém hơn việc làm sạch chậm hơn — rủi ro còn lại giờ đã được đo và
-giới hạn rõ ràng, không
-còn chỉ là "có thể xảy ra". Cách này vẫn luôn tốn recall thật với claim
-đúng chỉ dựa vào đúng cạnh đó, và sửa đồ thị một chiều (khác calibration
-chỉ chỉnh ngưỡng).
+năng, dùng cấu hình này làm mặc định** — `identify_and_prune_edges` (cùng
+module) tự áp dụng cấu hình này (tự chia `labeled_pairs`, tìm cạnh khả
+nghi, làm sạch, và trả lại phần dữ liệu giữ riêng chưa đụng tới để đánh
+giá độc lập), nên đây là lựa chọn mặc định dễ dùng nhất, không phải thứ
+người dùng phải nhớ tự cấu hình. Cách này vẫn luôn tốn recall thật với
+claim đúng chỉ dựa vào đúng cạnh đó, và sửa đồ thị một chiều (khác
+calibration chỉ chỉnh ngưỡng).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 phần remark ở PAPER.md §7.1.
 
