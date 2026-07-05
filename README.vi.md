@@ -265,7 +265,10 @@ cần cấu hình.
 | `grounded_reasoning/reasoning/llm_client.py` | LLM client không phụ thuộc nhà cung cấp (key đọc từ biến môi trường) |
 | `grounded_reasoning/theory/theorems.py` | **Chín định lý (F–N)** với kiểm chứng số |
 | `grounded_reasoning/experiments/*.py` | Thực nghiệm LLM thật và benchmark hậu thuẫn mọi khẳng định trên |
-| `examples/hallucination_demo.py` | Demo function-calling đầu-cuối |
+| `examples/hallucination_demo.py` | Demo function-calling đầu-cuối (LLM thật, cần key) |
+| `examples/rag_pipeline_demo.py` | `filter_claims` làm guard hậu-xử-lý cho pipeline RAG/agent, claim quan hệ khác loại (offline) |
+| `examples/calibration_demo.py` | Định lý M + N cạnh nhau: đo lường độ tin cậy bắc cầu và chuẩn hóa thay vì giả định (offline) |
+| `examples/conformal_demo.py` | Đánh đổi coverage vs. nhiễu, so sánh đồ thị sạch và đồ thị nhiễu cạnh nhau (offline) |
 | `examples/quickstart.ipynb` | Tour chạy được của thư viện (offline, sẵn sàng cho Colab) |
 
 ---
