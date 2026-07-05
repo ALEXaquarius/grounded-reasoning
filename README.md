@@ -215,6 +215,8 @@ python -m grounded_reasoning.experiments.guard_llm_stress_eval # harder: distrac
 python -m grounded_reasoning.experiments.self_grounded_eval    # SGDC
 python -m grounded_reasoning.experiments.clutrr_eval           # public CLUTRR benchmark
 python -m grounded_reasoning.experiments.conformal_llm_eval    # end-to-end conformal (LLM-extracted graph)
+python -m grounded_reasoning.experiments.guard_cost_eval       # token cost: guard vs. LLM self-verify
+python -m grounded_reasoning.experiments.nl_ontology_eval      # dense anti-commonsense ontology (add run_dense() for the 106/106 result)
 ```
 
 ---
@@ -229,8 +231,8 @@ path exists).
 from grounded_reasoning import GroundedReasoner
 gr = GroundedReasoner()
 gr.add_facts([("alice","parent","bob"),("bob","parent","carol")])
-gr.verify("alice","carol", via="parent")   # Verdict(grounded=True, proof=['alice','bob','carol'])
-gr.verify("alice","zed",   via="parent")   # Verdict(grounded=False, proof=None)  ← hallucination blocked
+gr.verify("alice","carol", via="parent")   # Verdict(grounded=True, proof=['alice','bob','carol'], confidence=0.36, relation='parent')
+gr.verify("alice","zed",   via="parent")   # Verdict(grounded=False, proof=None, confidence=0.0, relation='parent')  ← hallucination blocked
 ```
 
 Three integration paths (details: [docs/integration.md](docs/integration.md)):

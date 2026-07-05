@@ -216,6 +216,8 @@ python -m grounded_reasoning.experiments.guard_llm_stress_eval # khó hơn: nhi�
 python -m grounded_reasoning.experiments.self_grounded_eval    # SGDC
 python -m grounded_reasoning.experiments.clutrr_eval           # benchmark công khai CLUTRR
 python -m grounded_reasoning.experiments.conformal_llm_eval    # conformal đầu-cuối (đồ thị do LLM trích)
+python -m grounded_reasoning.experiments.guard_cost_eval       # chi phí token: guard vs. LLM tự kiểm
+python -m grounded_reasoning.experiments.nl_ontology_eval      # ontology dày đặc phản trực giác (dùng run_dense() để ra kết quả 106/106)
 ```
 
 ---
@@ -230,8 +232,8 @@ tồn tại đường chứng minh grounded).
 from grounded_reasoning import GroundedReasoner
 gr = GroundedReasoner()
 gr.add_facts([("alice","parent","bob"),("bob","parent","carol")])
-gr.verify("alice","carol", via="parent")   # Verdict(grounded=True, proof=['alice','bob','carol'])
-gr.verify("alice","zed",   via="parent")   # Verdict(grounded=False, proof=None)  ← chặn ảo giác
+gr.verify("alice","carol", via="parent")   # Verdict(grounded=True, proof=['alice','bob','carol'], confidence=0.36, relation='parent')
+gr.verify("alice","zed",   via="parent")   # Verdict(grounded=False, proof=None, confidence=0.0, relation='parent')  ← chặn ảo giác
 ```
 
 Ba cách tích hợp (chi tiết: [docs/integration.vi.md](docs/integration.vi.md)):
