@@ -4,6 +4,43 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.5 — Theorem M: a measured alternative to the binary transitivity guard
+
+0.1.4 closed the transitivity gap (§5.3.1) with a binary allowlist,
+`transitive_relations={...}`: declare a relation transitive, or the guard
+rejects it outright. Sound, but coarse — it can't say *how much* to trust a
+relation that's mostly-but-not-perfectly transitive, only accept-all or
+reject-all.
+
+### Added
+
+- **`GroundedReasoner.calibrate_transitivity(relation, labeled_pairs, alpha=0.1)`**
+  — a measured alternative (Theorem M): calibrates a Clopper-Pearson exact
+  lower confidence bound on "a graph-grounded composed claim for `relation`
+  is actually true," from held-out (subject, object, ground_truth) triples
+  where ground truth is known independently of the graph. Deliberately
+  bypasses the `transitive_relations` allowlist gate — that gate blocks a
+  *blind* assumption; this method measures the assumption instead of making
+  it, so it shouldn't be blocked by the other (binary) guard.
+- **`grounded_reasoning/reasoning/transitivity_calibration.py`** —
+  `clopper_pearson_lower(k, n, alpha)`, the exact one-sided binomial
+  confidence bound (Clopper & Pearson, 1934), computed by bisection on the
+  binomial survival function (no scipy dependency; cross-checked to
+  `scipy.stats.beta.ppf` to machine precision in development).
+- **Theorem M**, numerically verified (`theorem_transitivity_calibration`,
+  `tests/test_theorems.py`): 93.6% empirical coverage across 3,000 random
+  true precisions against a 90% target; degenerate evidence (0 or all
+  confirmations) behaves sanely.
+- **`grounded_reasoning/experiments/transitivity_calibration_eval.py`** — a
+  fully offline A/B comparison (synthetic ground truth) of the binary
+  allowlist against the calibrated bound on a "trusts"-like relation that's
+  85% (not 100%) transitive: the binary mechanism either silently trusts
+  everything (17% silently wrong, no risk reported) or rejects everything
+  (loses all 85% correct claims); the calibrated bound reports "≥80% true,
+  90% confidence" and that bound held on a held-out test set.
+- README.md/README.vi.md and PAPER.md §5.3.2 document the new theorem, proof,
+  and A/B comparison.
+
 ## 0.1.4 — Two opt-in guards for boundaries the algebra can't see itself
 
 Raised in an external review of the algebra (entity identity, transitivity as

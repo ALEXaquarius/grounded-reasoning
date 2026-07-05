@@ -9,7 +9,7 @@ abstract: >-
   Validated on real LLMs and the public CLUTRR benchmark; seven numerically
   verified theorems.
 type: software
-version: "0.1.4"
+version: "0.1.5"
 license: MIT
 repository-code: "https://github.com/ALEXaquarius/grounded-reasoning"
 keywords:

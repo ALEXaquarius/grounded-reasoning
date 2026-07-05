@@ -151,4 +151,7 @@ phân-phối-tự-do ≥ 1−α thay cho precision cứng — xem `PAPER.md` §7
   được cấp. Áp dụng cho quan hệ chỉ bắc cầu một phần/có điều kiện (ví dụ "trusts") vẫn
   cho ra `grounded=True` một cách tự tin nhưng trả lời sai câu hỏi. Dùng
   `GroundedReasoner(transitive_relations={...})` để guard từ chối mọi quan hệ chưa
-  khai báo thay vì âm thầm tin tưởng.
+  khai báo thay vì âm thầm tin tưởng — hoặc, để có câu trả lời đo được thay vì nhị
+  phân, gọi `gr.calibrate_transitivity(rel, labeled_pairs)` để lấy cận tin cậy
+  Clopper-Pearson cho tần suất một khẳng định được đồ thị chấp nhận cho `rel` thực
+  sự đúng (xem `PAPER.md` §5.3.2).

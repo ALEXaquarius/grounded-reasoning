@@ -84,14 +84,21 @@ under the rug:
   the world." Compose a relation that's only partially/conditionally
   transitive (`"trusts"`: A trusts B, B trusts C, does not imply A trusts C)
   and you get a confident, mathematically correct `grounded=True` that answers
-  a different question than the one you meant to ask. Fix:
+  a different question than the one you meant to ask. Fix (binary):
   `GroundedReasoner(transitive_relations={"parent", "is_a", ...})` makes the
   guard raise `ValueError` for any undeclared relation, turning a silent
-  modeling assumption into an explicit, checked one.
+  modeling assumption into an explicit, checked one. Fix (measured — **Theorem
+  M**): `gr.calibrate_transitivity(rel, labeled_pairs)` replaces the binary
+  declare-or-reject with an actual number — a Clopper-Pearson lower confidence
+  bound on "a graph-grounded claim for `rel` is really true," computed from
+  held-out labeled pairs. Where the binary guard can only guess or block
+  outright, the calibrated bound tells you *how much* to trust it.
 
-Both are opt-in and off by default (identical behavior to previous releases).
-Reproductions: `tests/test_agent.py::TestEntityNormalization`,
-`::TestTransitiveRelationsGuard`.
+Both opt-in guards are off by default (identical behavior to previous
+releases). Reproductions: `tests/test_agent.py::TestEntityNormalization`,
+`::TestTransitiveRelationsGuard`, `::TestTransitivityCalibration`; the A/B
+comparison against the binary guard:
+[`transitivity_calibration_eval.py`](grounded_reasoning/experiments/transitivity_calibration_eval.py).
 
 ### How this differs from the usual fixes
 
@@ -118,12 +125,14 @@ The reasoning core rests on a single unification (numerically verified, zero err
 
 ⟹ fuzzy inference **is** spectral analysis of the relation operator. `grounded_reasoning/reasoning/`.
 
-Four further theorems extend this core: **I** (two-sided precision/recall guarantee
+Five further theorems extend this core: **I** (two-sided precision/recall guarantee
 for a self-grounded, no-external-KB variant), **J** (closure-learning completeness,
 validated on CLUTRR), **K** (conformal reasoning — distribution-free coverage under a
-*noisy* relation graph, including one extracted by an LLM from raw text), and **L**
-(Horn forward-chaining, generalizing transitive closure to conjunctive rules). All
-seven are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
+*noisy* relation graph, including one extracted by an LLM from raw text), **L**
+(Horn forward-chaining, generalizing transitive closure to conjunctive rules), and
+**M** (empirical transitivity calibration — a Clopper-Pearson confidence bound
+replacing a blind transitivity assumption with a measured one). All
+eight are stated, proved, and numerically verified in [PAPER.md](PAPER.md).
 
 ---
 
@@ -231,9 +240,10 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/conformal_reasoning.py` | Conformal — coverage guarantee under noise (Theorem K) |
 | `grounded_reasoning/reasoning/composition_algebra.py` | Composition-table learning, validated on CLUTRR (Theorem J) |
 | `grounded_reasoning/reasoning/horn.py` | Horn forward-chaining, least-model semantics (Theorem L) |
+| `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration for the transitivity assumption (Theorem M) |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
-| `grounded_reasoning/theory/theorems.py` | **Seven theorems (F–L)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/theory/theorems.py` | **Eight theorems (F–M)** with numerical verification |
+| `grounded_reasoning/experiments/{guard_llm,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo |
 | `examples/quickstart.ipynb` | Runnable tour of the library (offline, Colab-ready) |
 

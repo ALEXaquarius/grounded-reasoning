@@ -12,6 +12,7 @@ from grounded_reasoning.theory.theorems import (
     theorem_operator_compositional_equivalence,
     theorem_relation_spectrum,
     theorem_sgdc_recall_bound,
+    theorem_transitivity_calibration,
 )
 
 
@@ -78,3 +79,10 @@ def test_sgdc_recall_bound_two_sided(theorem_results):
 def test_horn_least_model(theorem_results):
     r = theorem_results[theorem_horn_least_model]
     assert "CONFIRMED" in r["conclusion"]
+
+
+def test_transitivity_calibration_coverage(theorem_results):
+    r = theorem_results[theorem_transitivity_calibration]
+    assert r["empirical_coverage"] >= r["target_coverage"] - 0.02
+    assert r["zero_evidence_gives_zero_bound"]  # k=0 -> bound=0.0, never overconfident
+    assert r["full_evidence_bound_below_one"]   # k=n -> bound<1.0, never claims certainty

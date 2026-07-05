@@ -183,3 +183,57 @@ class TestTransitiveRelationsGuard:
         gr.add_facts([("alice", "trusts", "bob")])
         v = gr.verify("alice", "bob")  # via=None
         assert v.grounded
+
+
+class TestTransitivityCalibration:
+    """Theorem M: a measured confidence bound instead of a binary declaration."""
+
+    def _trust_graph(self):
+        gr = GroundedReasoner()
+        # A -> B -> C for several disjoint triples; "trusts" composes for some,
+        # not for others (ground truth supplied independently below).
+        gr.add_facts([
+            ("A1", "trusts", "B1"), ("B1", "trusts", "C1"),
+            ("A2", "trusts", "B2"), ("B2", "trusts", "C2"),
+            ("A3", "trusts", "B3"), ("B3", "trusts", "C3"),
+            ("A4", "trusts", "B4"), ("B4", "trusts", "C4"),
+        ])
+        return gr
+
+    def test_all_confirmed_gives_a_high_but_not_perfect_bound(self):
+        gr = self._trust_graph()
+        labeled = [("A1", "C1", True), ("A2", "C2", True),
+                   ("A3", "C3", True), ("A4", "C4", True)]
+        res = gr.calibrate_transitivity("trusts", labeled, alpha=0.1)
+        assert res["n_grounded"] == 4
+        assert res["n_confirmed"] == 4
+        assert 0.0 < res["precision_lower_bound"] < 1.0  # never claims certainty from n=4
+
+    def test_some_violations_lower_the_bound(self):
+        gr = self._trust_graph()
+        labeled = [("A1", "C1", True), ("A2", "C2", False),
+                   ("A3", "C3", True), ("A4", "C4", False)]
+        res = gr.calibrate_transitivity("trusts", labeled, alpha=0.1)
+        assert res["n_grounded"] == 4 and res["n_confirmed"] == 2
+        assert res["precision_lower_bound"] < 0.5
+
+    def test_ungrounded_pairs_are_excluded_from_the_count(self):
+        gr = self._trust_graph()
+        # ("A1", "C2", ...) has no path -> excluded, not counted as a violation
+        labeled = [("A1", "C1", True), ("A1", "C2", False)]
+        res = gr.calibrate_transitivity("trusts", labeled, alpha=0.1)
+        assert res["n_grounded"] == 1 and res["n_confirmed"] == 1
+
+    def test_bypasses_the_transitive_relations_allowlist(self):
+        # calibrate_transitivity measures the assumption; it must not be
+        # blocked by the OTHER (binary) guard meant for blind declarations.
+        gr = GroundedReasoner(transitive_relations={"parent"})  # "trusts" NOT declared
+        gr.add_facts([("A1", "trusts", "B1"), ("B1", "trusts", "C1")])
+        res = gr.calibrate_transitivity("trusts", [("A1", "C1", True)], alpha=0.1)
+        assert res["n_grounded"] == 1 and res["n_confirmed"] == 1
+
+    def test_respects_entity_normalization(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        gr.add_facts([("A1", "trusts", "B1"), ("b1", "trusts", "C1")])
+        res = gr.calibrate_transitivity("trusts", [("A1", "C1", True)], alpha=0.1)
+        assert res["n_grounded"] == 1

@@ -670,6 +670,83 @@ def theorem_horn_least_model(seed: int = 0) -> dict:
     }
 
 
+def theorem_transitivity_calibration(seed: int = 0) -> dict:
+    """
+    THEOREM M (Empirical Transitivity Calibration). `GroundedReasoner(via=rel)`
+    assumes `rel` composes transitively in reality (Theorem G is silent on
+    this — see agent/verifier.py's module docstring). Rather than a blind
+    binary declaration, calibrate a lower confidence bound on "a graph-grounded
+    composed claim for `rel` is actually true" from held-out labeled pairs.
+
+    Let p = the TRUE (unknown) probability that a pair the graph marks
+    grounded=True is actually true, and let k be the number confirmed true out
+    of n i.i.d./exchangeable calibration pairs. The Clopper-Pearson lower bound
+    p_L(k, n, alpha) (Clopper & Pearson, 1934; here computed by bisection on
+    the binomial survival function, cross-checked to scipy.stats.beta.ppf to
+    machine precision during development, no scipy dependency shipped) satisfies:
+
+        P(p_L <= p) >= 1 - alpha,  for EVERY true p in [0,1] (distribution-free
+        in the sense of requiring no assumption on p itself, only i.i.d./
+        exchangeable draws — the classical exact binomial confidence interval
+        guarantee, not a new result).
+
+    Proof: p_L is defined so that P(Binomial(n,p_L) >= k) = alpha. The event
+    {p_L(K,n) > p} (the bound is wrong) occurs iff K is large enough that even
+    the true p could not plausibly produce it at the alpha level, which by
+    construction of the exact interval has probability <= alpha under the true
+    p. This is the standard Clopper-Pearson coverage argument (Clopper &
+    Pearson 1934), applied here to a fully generic n and p range via direct
+    bisection rather than the closed-form beta-quantile, for zero extra
+    dependencies. QED (classical statistics; the contribution is applying it
+    to this system's transitivity gap, not inventing the interval).
+
+    Verification: for many random true precisions p and many random
+    calibration draws, the empirical coverage rate (fraction of draws where
+    the computed bound is <= the true p) must be >= 1-alpha.
+    """
+    import random
+
+    from grounded_reasoning.reasoning.transitivity_calibration import clopper_pearson_lower
+
+    rng = random.Random(seed)
+    alpha = 0.1
+    n_cal = 40
+    trials = 3000
+    covered = 0
+    worst_slack = 1e9
+    for _ in range(trials):
+        true_p = rng.uniform(0.05, 0.99)
+        k = sum(1 for _ in range(n_cal) if rng.random() < true_p)
+        bound = clopper_pearson_lower(k, n_cal, alpha)
+        slack = true_p - bound
+        worst_slack = min(worst_slack, slack)
+        if slack >= 0:
+            covered += 1
+    coverage = covered / trials
+
+    # sanity: k=0 always gives bound=0 (never wrongly confident with zero evidence);
+    # k=n gives a bound strictly less than 1 (never claims perfect certainty)
+    zero_ok = clopper_pearson_lower(0, n_cal, alpha) == 0.0
+    full_ok = 0.0 < clopper_pearson_lower(n_cal, n_cal, alpha) < 1.0
+
+    ok = coverage >= (1 - alpha) - 0.02 and zero_ok and full_ok
+    return {
+        "theorem": "M_TRANSITIVITY_CALIBRATION",
+        "target_coverage": 1 - alpha,
+        "empirical_coverage": round(coverage, 4),
+        "worst_case_slack": round(worst_slack, 4),
+        "zero_evidence_gives_zero_bound": zero_ok,
+        "full_evidence_bound_below_one": full_ok,
+        "conclusion": (
+            "CONFIRMED: Clopper-Pearson lower bound achieves >=1-alpha empirical "
+            "coverage across random true precisions; degenerate cases (k=0, k=n) "
+            "behave sanely"
+            if ok
+            else f"VIOLATED: coverage={coverage:.4f} zero_ok={zero_ok} full_ok={full_ok}"
+        ),
+    }
+
+
 ALL_THEOREMS = [
     theorem_fuzzy_inference,
     theorem_operator_compositional_equivalence,
@@ -678,4 +755,5 @@ ALL_THEOREMS = [
     theorem_closure_completeness,
     theorem_conformal_reasoning,
     theorem_horn_least_model,
+    theorem_transitivity_calibration,
 ]

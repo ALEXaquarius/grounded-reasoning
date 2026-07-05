@@ -18,11 +18,13 @@ no external knowledge base (Theorem I), and a **conformal** extension giving
 noisy — including end-to-end on a graph extracted by an LLM from raw text
 (Theorem K). The system is validated on the public **CLUTRR** benchmark, where
 the grounded solver holds ~100% accuracy flat across 2–10 composition hops
-while DeepSeek's accuracy falls from 83% to 8%. Seven theorems are stated,
-proved, and numerically verified; every claim distinguishes what is genuinely
-new (a unification, a measured guarantee, a described failure boundary) from
-what is classical mathematics applied honestly (Katz index, Neumann series,
-conformal prediction, Horn logic).
+while DeepSeek's accuracy falls from 83% to 8%. Eight theorems are stated,
+proved, and numerically verified — including a Clopper-Pearson calibration
+(Theorem M) that replaces a blind transitivity assumption with a measured
+confidence bound; every claim distinguishes what is genuinely new (a
+unification, a measured guarantee, a described failure boundary) from what is
+classical mathematics applied honestly (Katz index, Neumann series, conformal
+prediction, Clopper-Pearson intervals, Horn logic).
 
 ---
 
@@ -67,12 +69,13 @@ Contributions:
    (33% → 100% precision).
 3. **A falsifiable boundary** — a description, backed by experiments, of where
    LLM multi-hop reasoning holds versus collapses.
-4. **Seven theorems (F–L)**, each with numerical verification
+4. **Eight theorems (F–M)**, each with numerical verification
    (`grounded_reasoning/theory/theorems.py`, exercised by `tests/`), including **Theorem I**
    — a two-sided precision *and* recall guarantee for a self-grounded variant
-   that needs no external knowledge base — and **Theorem K**, a conformal
+   that needs no external knowledge base — **Theorem K**, a conformal
    extension with a distribution-free coverage guarantee under a noisy,
-   LLM-extracted graph.
+   LLM-extracted graph — and **Theorem M**, a Clopper-Pearson calibration
+   replacing a blind transitivity assumption with a measured confidence bound.
 
 The letter labels (F–L) are kept as-is from the project's internal numbering,
 where A–E were unrelated retrieval theorems not included in this repository.
@@ -94,6 +97,10 @@ where A–E were unrelated retrieval theorems not included in this repository.
   graph, including under LLM-induced extraction noise.
 - **Horn logic / Datalog forward-chaining**: classical least-model semantics,
   generalizing the transitive-closure guard to conjunctive rule bodies.
+- **Clopper-Pearson intervals** (Clopper & Pearson, 1934): the classical exact
+  confidence interval for a binomial proportion. Applied here (§5.3.2,
+  Theorem M) to calibrate confidence in the transitivity assumption itself,
+  from held-out labeled pairs.
 - **CLUTRR** (Sinha et al., EMNLP 2019): a public kinship-reasoning benchmark
   used here for a genuinely comparable, third-party evaluation.
 - **Self-consistency** (Wang et al.) and **Chain-of-Verification**: sampling
@@ -345,6 +352,58 @@ because neither failure mode is fixable *in general* — case sensitivity and
 non-transitive relations both have legitimate, intended uses; the library
 cannot make that domain judgment call for the caller, only offer the guard.
 
+**5.3.2 A measured alternative to the binary transitivity guard — Theorem M.**
+`transitive_relations={...}` (§5.3.1) closes the transitivity gap with a
+binary declare-or-reject allowlist. That is sound but coarse: it cannot say
+*how much* to trust a relation that's mostly-but-not-perfectly transitive, and
+gives the caller only two options — silently trust every grounded claim, or
+discard all of them.
+
+> **Theorem M** (Empirical Transitivity Calibration, numerically verified,
+> `tests/test_theorems.py::test_transitivity_calibration_coverage`,
+> `grounded_reasoning/reasoning/transitivity_calibration.py`):
+> Let `p` be the true (unknown) probability that a pair the graph marks
+> `grounded=True` via relation `rel` is actually true, estimated from `k`
+> confirmed-true pairs out of `n` i.i.d./exchangeable held-out calibration
+> pairs (ground truth known independently of the graph). The Clopper-Pearson
+> lower bound `p_L(k, n, α)` — the value solving `P(Binomial(n, p_L) ≥ k) = α`,
+> computed here by bisection on the binomial survival function rather than
+> the closed-form beta quantile (cross-checked to `scipy.stats.beta.ppf` to
+> machine precision in development; no scipy dependency shipped) — satisfies
+> `P(p_L ≤ p) ≥ 1−α` for every true `p ∈ [0,1]`.
+
+Proof: `p_L` is defined exactly by the point where the observed evidence `k`
+becomes the α-quantile outcome under the null `p = p_L`; this is the classical
+Clopper & Pearson (1934) exact interval, whose coverage argument requires only
+that the `n` calibration draws are i.i.d./exchangeable Bernoulli(`p`) trials —
+no assumption on `p` itself (the same "distribution-free" flavor as
+conformal prediction, §7.1, though this is a distinct classical tool applied
+to a distinct question here). Not new math; the contribution is pairing it
+with this system's transitivity gap, exactly as §7.1 pairs conformal
+prediction with the operator confidence score.
+
+Verified: for 3,000 random true precisions `p ~ U(0.05, 0.99)` and random
+calibration draws (`n=40`, `α=0.1`), empirical coverage was 93.6% (≥ 90%
+target); degenerate evidence behaves sanely (`k=0` → bound `0.0`, never
+overconfident from nothing; `k=n` → bound `<1.0`, never claims certainty).
+
+**A/B comparison** (`grounded_reasoning/experiments/transitivity_calibration_eval.py`,
+fully offline, synthetic ground truth so the true precision is known for
+scoring): a "trusts"-like relation with true composed-claim precision
+`q=0.85` (mostly, not perfectly, transitive).
+
+| | Claims kept | Precision | Risk reported |
+|---|---:|---:|---|
+| A. binary, declared transitive | all | 83% (actual) | **none** |
+| A. binary, undeclared | 0 | — | loses every one of the 85% that were true |
+| **B. calibrated** (`calibrate_transitivity`) | — | ≥ **80%**, 90% confidence | **yes, and it held** on a fresh held-out test set |
+
+The calibrated bound gives an honest, checkable number in exactly the
+situation where the binary mechanism can only guess blindly or reject
+everything — the same qualitative move as trading the hard guard (§5.3) for
+conformal coverage (§7.1) under a noisy graph, applied here to a noisy
+*assumption* instead of a noisy *graph*.
+
 **5.4 Directions to falsify or extend.** (i) Extract a grounded graph from a
 trustworthy non-LLM source and measure the guard end-to-end. (ii) Test on
 relations with cycles (ρ ≥ 1), where closure requires `α < 1/ρ`. (iii) Search
@@ -516,7 +575,8 @@ omnipotent oracle.
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
 - Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,nl_ontology_eval,guard_cost_eval,inference_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
-- Seven theorems (F–L): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
+- Offline-only experiment: `grounded_reasoning/experiments/transitivity_calibration_eval.py` (synthetic ground truth, no LLM call)
+- Eight theorems (F–M): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
   invariant has a deterministic offline lock). Real-LLM experiments need
   `DEEPSEEK_API_KEY` (or another supported provider) to run live.
@@ -527,4 +587,5 @@ Katz (1953); Kondor & Lafferty (2002, diffusion kernels); Vovk, Gammerman &
 Shafer (conformal prediction); Sinha et al. (2019, CLUTRR, EMNLP); Wang et al.
 (self-consistency); Garcez et al. (neuro-symbolic grounding); classical Horn
 logic / Datalog forward-chaining; Neumann series / resolvent (classical
-operator analysis).
+operator analysis); Clopper & Pearson (1934, exact confidence intervals for a
+binomial proportion).

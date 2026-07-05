@@ -156,4 +156,7 @@ grounded = [c for c, v in gr.filter_claims(llm_claims) if v.grounded]
   supplied graph. Composing a partially/conditionally transitive relation (e.g.
   "trusts") still returns a confident `grounded=True` that answers a different
   question than intended. Pass `GroundedReasoner(transitive_relations={...})` to make
-  the guard reject any undeclared relation instead of silently trusting it.
+  the guard reject any undeclared relation instead of silently trusting it — or, for
+  a measured answer instead of a binary one, call `gr.calibrate_transitivity(rel,
+  labeled_pairs)` for a Clopper-Pearson confidence bound on how often a
+  graph-grounded claim for `rel` is actually true (see `PAPER.md` §5.3.2).

@@ -194,6 +194,40 @@ class GroundedReasoner:
             out.append((c, self.verify(subj, obj, via=via)))
         return out
 
+    def calibrate_transitivity(
+        self, relation: str, labeled_pairs: list[tuple[str, str, bool]], alpha: float = 0.1
+    ) -> dict:
+        """
+        A measured alternative to `transitive_relations=` (Theorem M): instead of
+        blindly declaring `relation` transitive, calibrate a confidence bound from
+        held-out evidence.
+
+        `labeled_pairs`: (subject, object, is_actually_true) triples where
+        `is_actually_true` is known INDEPENDENTLY of this graph (e.g. human-
+        verified) — NOT derived from `verify()`. Pairs the graph does not mark
+        `grounded=True` via `relation` are excluded (the bound is about grounded
+        claims specifically). These must be held-out calibration data, not the
+        pairs you intend to trust the returned bound for.
+
+        Returns {n_grounded, n_confirmed, precision_lower_bound, alpha}:
+        with confidence >= 1-alpha, at least `precision_lower_bound` of this
+        graph's future grounded=True claims for `relation` are actually true
+        (Clopper-Pearson exact interval — classical statistics, not new;
+        `grounded_reasoning/reasoning/transitivity_calibration.py`).
+
+        Deliberately bypasses `transitive_relations=`'s allowlist (unlike
+        `verify()`): that gate exists to block a BLIND assumption, but here the
+        assumption is exactly what's being measured, not made.
+        """
+        from grounded_reasoning.reasoning.transitivity_calibration import calibrate_transitivity
+
+        ground_truth = {(a, b): truth for a, b, truth in labeled_pairs}
+        grounded_pairs = [
+            (a, b) for a, b, _ in labeled_pairs
+            if self._path_via(self._norm(a), self._norm(b), relation) is not None
+        ]
+        return calibrate_transitivity(grounded_pairs, ground_truth, alpha=alpha)
+
     # -- soundness / contradictions ----------------------------------------------
     def contradictions(self, relation: str) -> list[list[str]]:
         """
