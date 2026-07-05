@@ -6,10 +6,10 @@ abstract: >-
   relational claim before assertion with zero model tokens and a precision
   guarantee (accepts a claim iff a grounded proof path exists), plus a
   conformal mode giving distribution-free coverage under noisy graphs.
-  Validated on real LLMs and the public CLUTRR benchmark; seven numerically
+  Validated on real LLMs and the public CLUTRR benchmark; nine numerically
   verified theorems.
 type: software
-version: "0.1.6"
+version: "0.1.7"
 license: MIT
 repository-code: "https://github.com/ALEXaquarius/grounded-reasoning"
 keywords:

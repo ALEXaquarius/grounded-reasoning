@@ -4,13 +4,139 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased — heterogeneous relation-path verification and calibration
-
-Not yet version-bumped or published — pending confirmation before cutting a
-release (multiple small releases in quick succession is something to avoid
-going forward; batching is preferred where it doesn't block real fixes).
+## 0.1.7 — Heterogeneous paths, deeper fuzzing, SGDC calibration, and two conformal extensions
 
 ### Added
+
+- **`AdaptiveConformalReasoner`** (Adaptive Conformal Inference, Gibbs & Candès
+  2021 — classical, not new): both `ConformalReasoner` and its Mondrian
+  extension assume calibration and test data are exchangeable, which breaks
+  if the noise level *drifts* over time (e.g. later document batches
+  extracted more/less cleanly). ACI instead updates its threshold from a
+  stream of confirmed-true examples, with no stationarity assumption needed
+  for its own guarantee. Verified over 15 trials: a stream shifting from
+  `p_drop=0.05` to `p_drop=0.45` partway through collapses a frozen
+  threshold's coverage from 88.6% to 47.6%, while ACI recovers to 89.6% and
+  stays there in every trial — `grounded_reasoning/experiments/drift_conformal_eval.py`,
+  `tests/test_drift_conformal_eval.py`. This followed 6 other hypotheses
+  tried and falsified/found neutral in the same exploration (hop-distance
+  grouping, bootstrap-stability scoring, finer redundancy buckets,
+  contribution-concentration grouping, cross-view corroboration) — recorded
+  honestly rather than hidden.
+- **`ConformalReasoner.calibrate(..., group_fn=...)`** (Mondrian /
+  group-conditional conformal prediction — classical, not new): calibrates a
+  separate threshold per group of an available-at-test-time partitioning
+  function instead of one global threshold, still satisfying the same
+  coverage guarantee within each group. `redundancy_group` (new:
+  `FuzzyInferenceEngine.path_multiplicity`) groups a pair by whether it has
+  more than one walk in the extracted graph; verified over 60 seeds/scenario
+  to cut FPR from 98.7% to 80.8% when dropped edges dominate the noise
+  (matching real LLM-extraction noise), with no benefit when spurious added
+  edges dominate instead (disclosed, not hidden) —
+  `grounded_reasoning/experiments/redundancy_conformal_eval.py`,
+  `tests/test_redundancy_conformal_eval.py`. A different grouping (hop-
+  distance) was tried first and numerically falsified before shipping.
+- **`GroundedReasoner.calibrate_transitivity` extended to SGDC, with zero new
+  code**: SGDC's Theorem I precision=1.0 guarantee is conditional on the
+  LLM's own atomic facts being sound. `calibrate_transitivity` doesn't care
+  whether a reasoner's facts came from an external KB or the model's own
+  atomic self-assertions, so it already calibrates SGDC's real output
+  precision directly. Verified: with 15% of a synthetic domain's atomic facts
+  wrong, SGDC's real precision fell to ~74% (not the naively-expected ~85% —
+  a single wrong atomic edge composes into several downstream claims,
+  amplifying its damage), and the calibrated bound stayed below that in
+  98.3% of trials — `grounded_reasoning/experiments/self_grounded_calibration_eval.py`,
+  documented as a Remark in PAPER.md §6 (not a new theorem).
+- **`GroundedReasoner.verify_path(subject, obj, via=[rel1, rel2, ...])`** —
+  verifies a claim through an exact sequence of possibly *different* relation
+  types (e.g. `["parent", "employer"]`), generalizing `verify(via=rel)`
+  (a single relation's repeated closure). Not new math:
+  `OperatorRelationAlgebra.follow` already composes heterogeneous relation
+  chains exactly (Theorem G's own numerical verification exercises mixed
+  chains); this exposes that capability at the facade and adds proof-path
+  reconstruction, which `follow` (a pure reachability check) does not provide.
+  Checked against independent ground-truth BFS across 8,000 (subject,
+  relation-chain, object) triples with zero mismatches, every returned proof
+  path independently confirmed to consist of real edges in the declared order.
+- **`GroundedReasoner.calibrate_path(via, labeled_pairs, alpha=0.1)`** —
+  calibrates a fixed heterogeneous path pattern with the identical
+  Clopper-Pearson machinery as `calibrate_transitivity` (Theorem M);
+  documented as an honest generalization (PAPER.md §5.3.4), not a new theorem
+  letter, since nothing in Theorem M's argument was specific to a single
+  relation's closure. Practical caveat documented directly: calibration is
+  per exact path pattern — evidence for one sequence says nothing about a
+  different one.
+- **`grounded_reasoning/experiments/heterogeneous_path_calibration_eval.py`**
+  — a fully offline demo (synthetic "financially dependent on" claim composed
+  from `parent` then `employer`), checked against the *known* true precision
+  (88% empirical coverage over 200 trials against a 90% target) as well as a
+  noisier, realistic comparison against a finite held-out test sample.
+- **`grounded_reasoning/experiments/guard_llm_stress_eval.py`** — a harder,
+  live-DeepSeek hallucination-guard stress test (48-person tree, sibling/
+  spouse distractor facts, shuffled prose, T=0.7, guaranteed-empty trap
+  questions). Measured: raw precision as low as 4.6% (2124 fabricated names,
+  86/90 trap questions fabricated); guarded precision 100%, 0 leaked, 0
+  correct answers dropped.
+- **4 new runnable, fully offline demos** in `examples/` (previously only 2
+  existed): `self_grounded_demo.py` (SGDC with no external KB), `rag_pipeline_demo.py`
+  (`filter_claims` as a RAG post-processing guard over heterogeneous
+  `via=[...]` claims), `calibration_demo.py` (Theorem M + N side by side),
+  `conformal_demo.py` (coverage-vs-noise tradeoff, now also demonstrating
+  `redundancy_group` grouping and `AdaptiveConformalReasoner`).
+- A wider fuzz-testing pass (`tests/test_fuzz_regressions.py::TestWiderFuzzProperty`)
+  cross-checking `verify(via=None)`, `verify_path`, `contradictions`,
+  `normalize=`, `filter_claims` dispatch, and `transitive_relations=` against
+  independent baselines over thousands of random graphs — 0 correctness
+  failures found. Surfaced one real, previously-undocumented property (not a
+  bug): `Verdict.confidence` is `Sum_k alpha^k*(P^k)[a,b]`, a sum across
+  hop-counts, not itself a probability, so a strong self-loop/cycle can push
+  it above 1.0 — clarified in `Verdict.confidence`'s docstring and locked
+  with a regression test.
+
+### Fixed
+
+- **Hash-seed-dependent test/demo nondeterminism**: three places iterated a
+  Python `set` of *strings* (`edges` in `conformal_llm_eval.py`'s `render()`,
+  `gold` in `tests/test_conformal_llm.py`, and a `variants()` set in
+  `normalization_calibration_eval.py`) while consuming an RNG stream one draw
+  per item. Set iteration order is randomized per-process for `str`/`bytes`
+  keys (`PYTHONHASHSEED`) — unlike `int` keys, which hash deterministically —
+  so which RNG draw landed on which item, and hence the numeric/textual
+  outcome, silently varied by interpreter hash seed even with every
+  `random.Random(seed)` fixed. This is the confirmed root cause of the
+  intermittent, previously-unreproducible coverage-assertion failures seen
+  in `test_conformal_llm.py` and `test_normalization_calibration_eval.py`.
+  Fixed by wrapping each set in `sorted()` before iterating/sampling.
+  Verified: all three call paths now produce byte-identical output across 5+
+  distinct `PYTHONHASHSEED` values (previously varied on every one). Audited
+  every other `set`-of-strings iteration in the codebase (theorems, other
+  experiments, other tests) for the same pattern — none found.
+- **2 doc/code drift gaps** found in a careful documentation audit: the
+  `Verdict` repr example in README.md/README.vi.md omitted the real
+  `confidence`/`relation` fields; the Quickstart's runnable-command list
+  omitted `guard_cost_eval.py` and `nl_ontology_eval.py` despite both
+  needing a real LLM key and backing claims elsewhere in the same README.
+- **1 miscategorization in PAPER.md's "Reproducing this work"**:
+  `inference_eval.py` (a fully offline synthetic simulation, no LLM call
+  anywhere in the file) was listed under "Real-LLM experiments"; moved to
+  the offline-only list, and two experiments that existed but were missing
+  from either list (`guard_llm_stress_eval.py`, `heterogeneous_path_calibration_eval.py`)
+  were added to the correct one.
+- **A degenerate-precision false alarm in `guard_llm_stress_eval.py`**:
+  `max_queries_per_trial` previously let an all-trap subsample through (a
+  trap query's ground truth is empty by construction, so an all-trap sample
+  has zero true positives), misreporting `tp/(tp+fp)` as 0.0 and reading as
+  "GUARD LEAK" even though the guard had correctly filtered every single
+  hallucination. Fixed by capping trap queries at half the per-trial budget
+  and reporting precision as `None` (undefined, not "bad") rather than 0.0
+  when `tp+fp==0`; the pass/fail check now keys off `guard_leaked==0` directly.
+- **A measurement artifact in `examples/conformal_demo.py`**: its FPR metric
+  included pairs with confidence exactly 0 (never genuinely "at risk" of
+  acceptance except in the degenerate `tau<=0` case), which made the demo's
+  own "efficiency degrades with noise" narrative an artifact of pure edge-
+  dropping (which can never fabricate a false positive) rather than a real
+  phenomenon. Fixed by filtering to genuine candidates and adding a fixed
+  spurious-edge rate, matching `theorem_conformal_reasoning`'s own convention.
 
 - **`GroundedReasoner.verify_path(subject, obj, via=[rel1, rel2, ...])`** —
   verifies a claim through an exact sequence of possibly *different* relation
