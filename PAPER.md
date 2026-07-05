@@ -579,6 +579,37 @@ SGDC's quality is bounded by a quantity that can be *measured* before trusting
 it: precision is locked at 1 by atomic soundness, and recall is lost by
 exactly the atomic incompleteness (1−c), no more.
 
+**Remark: the survival condition generalizes to a measured bound for free,
+same as §5.3.4.** Theorem I's precision=1.0 guarantee is *conditional* on
+atomic soundness (`A_llm ⊆ T`) — a binary assumption the "counter-prior
+world" paragraph above shows can silently fail. `calibrate_transitivity`
+(Theorem M) does not care whether a `GroundedReasoner`'s facts came from an
+external KB or from an LLM's own atomic self-assertions — its argument only
+needs i.i.d./exchangeable held-out labeled pairs for *some* fixed
+graph-derived boolean predicate, exactly as already noted in §5.3.4. Calling
+it on a reasoner built purely from an LLM's own atomic facts — held-out
+labeled pairs for SGDC's own `grounded=True` claims — measures SGDC's actual
+precision directly, with **zero new code, zero new theorem**: this already
+works today.
+
+This is worth stating explicitly because the natural-seeming shortcut —
+estimate SGDC's output precision from the atomic layer's own precision,
+without recalibrating the output — is *wrong*, not merely imprecise: in a
+synthetic domain with a random `is_a` hierarchy (40 concepts) and 15% of the
+atomic facts replaced with an incorrect parent (simulating a counter-prior
+domain), SGDC's own multi-hop output precision fell to ~74–75%, not the
+naively-expected ~85% — a single wrong atomic edge can be *composed into*
+several downstream multi-hop claims, amplifying its damage. Calibrating the
+final SGDC output directly (rather than propagating a bound through the
+atomic layer, which would require new and considerably harder math) sidesteps
+this amplification entirely and is checked, numerically, against a
+synthetic ground truth where the true precision is known
+(`grounded_reasoning/experiments/self_grounded_calibration_eval.py`,
+`tests/test_self_grounded_calibration_eval.py`): the calibrated bound stayed
+≤ the true precision in 98.3% (118/120) of trials spanning three atomic-error
+rates (5%, 15%, 30%, 40 seeds each) — consistent with the α=0.1 target, same
+aggregate-rate check used throughout §5.3.2's own verification.
+
 ---
 
 ## 7. Further directions (verdict: keep / discard)
@@ -675,7 +706,7 @@ omnipotent oracle.
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
 - Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,guard_llm_stress_eval,nl_ontology_eval,guard_cost_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
-- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval}.py`
+- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval}.py`
 - Nine theorems (F–N): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
   invariant has a deterministic offline lock). Real-LLM experiments need

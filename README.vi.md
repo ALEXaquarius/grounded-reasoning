@@ -60,7 +60,12 @@ solver phủ 99.5%, accuracy 99.2%. `grounded_reasoning/experiments/clutrr_eval.
   tra lại chính nó" — tốn thêm +110% token mà chỉ đạt 34% precision.
 - **Bảo đảm hai chiều** (Định lý I): cả precision *và* recall đều có cận chặt.
 - **Không cần knowledge-base ngoài** (SGDC): chỉ dùng tính nhất quán nội tại của
-  chính LLM.
+  chính LLM. Precision=1.0 chỉ đúng KHI fact 1-hop của chính LLM là chuẩn xác;
+  giả định đó cũng đo được — `calibrate_transitivity` không quan tâm fact đến
+  từ KB ngoài hay từ chính LLM tự khẳng định, nên nó đã hiệu chỉnh được
+  precision thực của SGDC mà không cần thêm code
+  (xem [`self_grounded_calibration_eval.py`](grounded_reasoning/experiments/self_grounded_calibration_eval.py),
+  PAPER.md §6 phần remark).
 
 **KHÔNG LÀ:** một "đột phá chưa từng có". Katz index, chuỗi Neumann, reachability, và
 neuro-symbolic grounding đều là **toán học/kỹ thuật cổ điển**. Đóng góp nằm ở **sự

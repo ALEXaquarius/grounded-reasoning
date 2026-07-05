@@ -59,6 +59,12 @@ covers 99.5%, accuracy 99.2%. `grounded_reasoning/experiments/clutrr_eval.py`.)*
   "have the LLM self-verify," which costs +110% tokens for 34% precision.
 - **Two-sided guarantee** (Theorem I) — precision *and* recall both have tight bounds.
 - **No external KB required** (SGDC) — uses the LLM's own internal consistency.
+  Precision=1.0 is conditional on the LLM's own atomic facts being sound; that
+  assumption can be measured too — `calibrate_transitivity` doesn't care
+  whether facts came from an external KB or the model's own assertions, so it
+  already calibrates SGDC's real output precision with zero new code (see
+  [`self_grounded_calibration_eval.py`](grounded_reasoning/experiments/self_grounded_calibration_eval.py),
+  PAPER.md §6's remark).
 
 **Is not:** an "unprecedented breakthrough." The Katz index, the Neumann series,
 graph reachability, and neuro-symbolic grounding are all classical math and
@@ -267,7 +273,7 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration — reused for both the transitivity assumption (Theorem M) and the normalization over-merge risk (Theorem N) |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
 | `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,self_grounded_calibration,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo (real LLM, needs a key) |
 | `examples/self_grounded_demo.py` | SGDC (Theorem I): self-verify a model's own multi-hop claim with NO external KB (offline) |
 | `examples/rag_pipeline_demo.py` | `filter_claims` as a RAG/agent post-processing guard, heterogeneous claims (offline) |
