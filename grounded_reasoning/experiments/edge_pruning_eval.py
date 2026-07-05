@@ -72,7 +72,15 @@ def noisy_edges(true_edges, n: int, rng: random.Random, p_drop: float, p_add: fl
     return edges
 
 
-def measure(seed: int, p_drop: float, p_add: float, alpha: float = 0.1, n: int = 45):
+def measure(
+    seed: int,
+    p_drop: float,
+    p_add: float,
+    alpha: float = 0.1,
+    n: int = 45,
+    identify_frac: float = 0.5,
+    min_evidence: int = 1,
+):
     n, true_edges, truth = build_true_dag(seed, n)
     rng = random.Random(1000 + seed)
     edges = list(noisy_edges(true_edges, n, rng, p_drop, p_add))
@@ -85,14 +93,20 @@ def measure(seed: int, p_drop: float, p_add: float, alpha: float = 0.1, n: int =
 
     rng2 = random.Random(3000 + seed)
     rng2.shuffle(all_candidates)
-    half = len(all_candidates) // 2
-    # the FIRST half supplies held-out labeled evidence to identify suspect
-    # edges; the SECOND half is used to evaluate both graphs -- disjoint, no
-    # double-dipping on the same evidence used to prune
-    identify_pairs = [(x, b, b in truth[x]) for x, b in all_candidates[:half]]
-    eval_candidates = all_candidates[half:]
+    split = int(len(all_candidates) * identify_frac)
+    # `identify_frac` of the pairs supply held-out labeled evidence to
+    # identify suspect edges; the rest are used to evaluate both graphs --
+    # disjoint, no double-dipping on the same evidence used to prune. Using a
+    # LARGER identify_frac (e.g. 0.8 instead of 0.5) measurably reduces the
+    # rate at which a genuinely correct edge is wrongly blocked -- see
+    # `run_mitigation_comparison` and the module docstring.
+    identify_pairs = [(x, b, b in truth[x]) for x, b in all_candidates[:split]]
+    eval_candidates = all_candidates[split:]
 
-    blocked = identify_suspect_edges(edges, identify_pairs, walk_len=12, alpha=0.7)
+    blocked = identify_suspect_edges(edges, identify_pairs, walk_len=12, alpha=0.7, min_evidence=min_evidence)
+    wrongly_blocked_rate = (
+        sum(1 for e in blocked if e in true_edges) / len(blocked) if blocked else 0.0
+    )
     cleaned_edges = prune_edges(edges, blocked)
     eng_clean = FuzzyInferenceEngine(walk_len=12, alpha=0.7)
     for a, b in cleaned_edges:
@@ -126,6 +140,7 @@ def measure(seed: int, p_drop: float, p_add: float, alpha: float = 0.1, n: int =
         "raw_coverage": r_raw[0], "raw_fpr": r_raw[1],
         "cleaned_coverage": r_clean[0], "cleaned_fpr": r_clean[1],
         "n_blocked": len(blocked),
+        "wrongly_blocked_rate": wrongly_blocked_rate,
     }
 
 
@@ -146,6 +161,28 @@ def run(n_seeds: int = 60, alpha: float = 0.1) -> dict:
     return out
 
 
+def run_mitigation_comparison(n_seeds: int = 60, alpha: float = 0.1) -> dict:
+    """
+    Compares the default identification split/threshold (identify_frac=0.5,
+    min_evidence=1) against a safer configuration (identify_frac=0.8,
+    min_evidence=2) on the dropout+spurious mixed regime, reporting the rate
+    at which a genuinely correct edge is wrongly blocked alongside the
+    resulting cleaned FPR/coverage -- the actual tradeoff behind the choice
+    of identify_frac and min_evidence, not just their effect in isolation.
+    """
+    p_drop, p_add = 0.2, 0.3
+    configs = {
+        "default (identify_frac=0.5, min_evidence=1)": {"identify_frac": 0.5, "min_evidence": 1},
+        "safer (identify_frac=0.8, min_evidence=2)": {"identify_frac": 0.8, "min_evidence": 2},
+    }
+    out = {}
+    for label, kwargs in configs.items():
+        rows = [measure(s, p_drop, p_add, alpha, **kwargs) for s in range(n_seeds)]
+        rows = [r for r in rows if r is not None]
+        out[label] = {k: sum(r[k] for r in rows) / len(rows) for k in rows[0]}
+    return out
+
+
 def main() -> None:
     res = run()
     print("=" * 88)
@@ -155,13 +192,30 @@ def main() -> None:
         print(f"\n-- {label} --")
         print(f"   RAW:     coverage={m['raw_coverage']:.1%}  fpr={m['raw_fpr']:.1%}")
         print(f"   CLEANED: coverage={m['cleaned_coverage']:.1%}  fpr={m['cleaned_fpr']:.1%}  "
-              f"(avg {m['n_blocked']:.1f} edges blocked)")
+              f"(avg {m['n_blocked']:.1f} edges blocked, {m['wrongly_blocked_rate']:.1%} wrongly blocked)")
     print(
         "\n=> Removing held-out-evidence-flagged suspect edges substantially and consistently\n"
         "   cuts false-positive rate across every noise regime tested -- coverage on the\n"
         "   remaining graph is essentially unaffected. This is a simple decision rule\n"
         "   (any single disqualifying encounter removes an edge), not a statistical\n"
-        "   guarantee like the Clopper-Pearson bounds elsewhere in this project."
+        "   guarantee like the Clopper-Pearson bounds elsewhere in this project -- the\n"
+        "   wrongly-blocked rate above is real, not negligible, and is the actual price\n"
+        "   of the FPR reduction."
+    )
+
+    print("\n" + "=" * 88)
+    print("Mitigation: identify_frac and min_evidence vs. the wrongly-blocked rate")
+    print("=" * 88)
+    mit = run_mitigation_comparison()
+    for label, m in mit.items():
+        print(f"\n-- {label} --")
+        print(f"   wrongly_blocked_rate={m['wrongly_blocked_rate']:.1%}  "
+              f"cleaned_fpr={m['cleaned_fpr']:.1%}  cleaned_coverage={m['cleaned_coverage']:.1%}")
+    print(
+        "\n=> Using a larger share of held-out data to identify suspect edges (and requiring\n"
+        "   a second corroborating false-claim encounter) substantially cuts the rate at\n"
+        "   which a genuinely correct edge is wrongly removed, at the cost of a smaller\n"
+        "   reserved evaluation set and somewhat less aggressive cleaning (higher cleaned FPR)."
     )
 
 

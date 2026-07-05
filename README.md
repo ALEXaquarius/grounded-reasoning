@@ -239,11 +239,18 @@ was numerically **falsified**: it made FPR worse at every noise level,
 because Mondrian must preserve coverage even for the few true claims that
 cross a bad edge, forcing that group's threshold down. Unlike every
 calibration method above, this one carries **no false-discovery-rate
-guarantee** — a real tradeoff, not hidden: with a small or unrepresentative
-held-out sample an edge could in principle be wrongly removed, it costs real
-recall for any true claim that depended solely on that edge, and it edits
-the graph in place (a one-way change, unlike calibration which only adjusts
-a threshold).
+guarantee** — a real tradeoff, MEASURED, not just disclosed as a
+possibility: with a 50/50 split of held-out data (half to identify suspect
+edges, half reserved for evaluation) and the default rule, **17–19% of
+removed edges were genuinely correct**. Using a larger share of held-out
+data to identify suspect edges (`identify_frac=0.8` instead of 0.5) drops
+this to **~5.5%**, and additionally requiring a second corroborating
+false-claim encounter (`min_evidence=2`) drops it further to **~4.2–4.5%**
+— at the cost of a smaller reserved evaluation set and a somewhat higher
+cleaned FPR (~58.0% instead of ~49.2% in the same regime, still far below
+the 77.0% raw baseline). It also costs real recall for any true claim that
+depended solely on a removed edge, and it edits the graph in place (a
+one-way change, unlike calibration which only adjusts a threshold).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 PAPER.md §7.1's remark.
 

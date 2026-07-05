@@ -5,7 +5,7 @@ LLM/network needed.
 """
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 from grounded_reasoning.reasoning.edge_pruning import identify_suspect_edges, prune_edges
-from grounded_reasoning.experiments.edge_pruning_eval import run
+from grounded_reasoning.experiments.edge_pruning_eval import run, run_mitigation_comparison
 
 
 def test_blocks_a_spurious_edge_with_zero_true_support():
@@ -60,3 +60,18 @@ def test_cleaning_reduces_fpr_across_noise_regimes():
     for label, m in res.items():
         assert m["cleaned_fpr"] < m["raw_fpr"] - 0.05, f"{label}: {m}"
         assert m["cleaned_coverage"] >= 0.9 - 0.05, f"{label}: {m}"
+
+
+def test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate():
+    # the measured mitigation: using a larger share of held-out data to
+    # identify suspect edges, plus requiring a second corroborating
+    # false-claim encounter, substantially reduces the rate at which a
+    # genuinely correct edge is wrongly removed -- a real cost of the
+    # decision rule, not just a theoretical possibility, and not eliminated
+    # by this mitigation, only reduced
+    res = run_mitigation_comparison(n_seeds=20)
+    default = res["default (identify_frac=0.5, min_evidence=1)"]
+    safer = res["safer (identify_frac=0.8, min_evidence=2)"]
+    assert safer["wrongly_blocked_rate"] < default["wrongly_blocked_rate"] - 0.05
+    # the mitigation still cleans meaningfully, just less aggressively
+    assert safer["cleaned_fpr"] < 0.7

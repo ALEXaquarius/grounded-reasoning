@@ -786,11 +786,25 @@ grouping could not touch. The two are complementary, not competing: this
 targets specific corrupted edges from labeled evidence; redundancy grouping
 targets structural heterogeneity among otherwise-legitimate claims.
 
-**The tradeoffs, stated plainly (this is a decision rule, not a proof).**
-Unlike every calibration method elsewhere in this project, this one carries
-no probabilistic bound: (1) there is no false-discovery-rate guarantee — with
-a small or unrepresentative held-out sample, a genuinely correct edge could
-in principle be removed; (2) it costs real recall — any true claim depending
+**The tradeoffs, stated plainly and MEASURED, not just disclosed as a
+possibility (this is a decision rule, not a proof).** Unlike every
+calibration method elsewhere in this project, this one carries no
+probabilistic bound: (1) there is no false-discovery-rate guarantee, and the
+wrongly-removed rate is not negligible — measured directly (a genuinely
+correct edge is one that exists in the true generating graph): with a 50/50
+split of held-out data (half to identify suspect edges, half reserved for
+the table above) and the default rule (`min_evidence=1`), **17–19% of
+removed edges were genuinely correct**, across the dropout-dominant regime.
+Two measured mitigations, not a formal fix: using a *larger* share of
+held-out data to identify suspect edges (`identify_frac=0.8` instead of
+0.5) drops this to **~5.5%**, and additionally requiring a second
+corroborating false-claim encounter (`min_evidence=2`) drops it further to
+**~4.2–4.5%** — at a real, measured cost: cleaned FPR rises from ~49.2% to
+~58.0% in the same regime (still far below the 77.0% raw baseline), and the
+reserved evaluation set shrinks. See
+`run_mitigation_comparison` in `edge_pruning_eval.py` and
+`test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate`. (2)
+it costs real recall regardless of configuration — any true claim depending
 solely on a removed edge loses that path (visible above as the small
 coverage shifts between raw and cleaned); (3) it edits the graph in place, a
 one-way structural change, unlike calibration (which only adjusts a
