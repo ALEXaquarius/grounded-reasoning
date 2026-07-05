@@ -25,6 +25,22 @@ A different partitioning function tried first (hop-distance) was numerically
 FALSIFIED -- it made efficiency WORSE, not better -- and is not shipped; see
 PAPER.md §7.1's remark for the full account of both the working and the
 falsified attempt.
+
+Also not new: Adaptive Conformal Inference (ACI, Gibbs & Candès 2021) — both
+`ConformalReasoner` above and its Mondrian extension assume the calibration
+and test data are drawn from the SAME distribution (exchangeable). If the
+underlying noise level DRIFTS over time (e.g. later document batches are
+extracted more or less cleanly than earlier ones -- a realistic scenario for
+an LLM-extraction pipeline processing many documents over time), a threshold
+calibrated once can badly lose its coverage guarantee once conditions shift.
+ACI instead updates the threshold continuously from a stream of confirmed-
+true examples, with NO stationarity or exchangeability assumption needed for
+its own guarantee (the running-average miscoverage rate converges to alpha
+for ANY score sequence, including adversarial drift). `AdaptiveConformalReasoner`
+exposes this. Numerically verified (`drift_conformal_eval.py`): under a noise
+level that jumps partway through a stream, a frozen split-conformal threshold
+collapses from ~89% to ~48% coverage after the shift (15/15 trials), while
+ACI recovers to ~90% within its own calibration window.
 """
 from __future__ import annotations
 
@@ -140,3 +156,97 @@ class ConformalReasoner:
     def predict_set(self, x, candidates) -> set:
         """The prediction set {b : conf(x→b) >= tau} — guaranteed to contain the true answer with probability >= 1-alpha."""
         return {b for b in candidates if self._conf(x, b) >= self._tau_for(x, b)}
+
+
+class AdaptiveConformalReasoner:
+    """
+    Adaptive Conformal Inference (ACI, Gibbs & Candès 2021): a threshold that
+    ADAPTS from a STREAM of confirmed-true examples, instead of one threshold
+    frozen after a single calibration batch (`ConformalReasoner`).
+
+    Use this instead of `ConformalReasoner` when the noise level can DRIFT
+    over the lifetime of the system (e.g. a pipeline that keeps extracting
+    facts from new documents, some cleaner than others) -- a scenario where a
+    once-calibrated threshold's coverage guarantee can silently degrade, since
+    split-conformal's argument needs calibration and test data to come from
+    the same distribution. ACI instead tracks the target miscoverage rate
+    online: after each new confirmed-true `(x, b)` pair, it checks whether
+    that pair WOULD have been accepted under the current threshold, then
+    nudges an internal quantile level `alpha_t` up or down (Gibbs & Candès's
+    update: `alpha_t += gamma * (alpha - err)`, `err = 0` if covered else `1`)
+    before recomputing the threshold from a bounded sliding window of recent
+    scores. No assumption is made about how the process drifts; the
+    guarantee is on the LONG-RUN AVERAGE miscoverage rate, not on any single
+    prediction.
+    """
+
+    def __init__(
+        self, engine, alpha: float = 0.1, gamma: float = 0.05, window: int = 300,
+        init_scores: list[float] | None = None,
+    ) -> None:
+        self.engine = engine
+        self.alpha_target = alpha
+        self.gamma = gamma
+        self.window = window
+        self._cache: dict = {}
+        self._pool: list[float] = list(init_scores) if init_scores else []
+        self._alpha_t = alpha
+        self.n_updates = 0
+        self.n_covered = 0
+
+    def _conf(self, x, b) -> float:
+        if x not in self._cache:
+            self._cache[x] = self.engine.infer(x)
+        return self._cache[x].get(b, 0.0)
+
+    @property
+    def tau(self) -> float:
+        """The CURRENT threshold, recomputed from the sliding window and alpha_t."""
+        if not self._pool:
+            return float("-inf")
+        k = int(self._alpha_t * (len(self._pool) + 1))
+        if k < 1:
+            return float("-inf")
+        return sorted(self._pool)[min(k, len(self._pool)) - 1]
+
+    def accept(self, x, b) -> bool:
+        """Accept (x, b) if its confidence is >= the CURRENT adaptive threshold."""
+        return self._conf(x, b) >= self.tau
+
+    def update(self, x: str, b: str) -> bool:
+        """
+        Feed one new confirmed-true `(x, b)` pair (ground truth known
+        independently, e.g. human-verified): looks up its confidence via the
+        engine and forwards to `update_score` (see there for the update rule).
+
+        Call this as true examples become confirmed over time -- the more
+        recently confirmed examples matter more (bounded window), so the
+        threshold naturally tracks a drifting noise level instead of staying
+        anchored to whatever the process looked like at initial calibration.
+        """
+        return self.update_score(self._conf(x, b))
+
+    def update_score(self, s: float) -> bool:
+        """
+        Feed one new confirmed-true example's SCORE directly (bypassing the
+        engine -- useful when scores are precomputed, e.g. for reproducible
+        A/B comparisons in an eval harness). Records whether it would have
+        been accepted under the threshold in effect BEFORE this call, adapts
+        `alpha_t` (Gibbs & Candès's update: `alpha_t += gamma*(alpha - err)`,
+        `err = 0` if covered else `1`), then folds the score into the sliding
+        window used for the next threshold. Returns whether it was covered.
+        """
+        covered = s >= self.tau
+        self.n_updates += 1
+        self.n_covered += int(covered)
+        err = 0 if covered else 1
+        self._alpha_t = min(0.999, max(0.001, self._alpha_t + self.gamma * (self.alpha_target - err)))
+        self._pool.append(s)
+        if len(self._pool) > self.window:
+            self._pool.pop(0)
+        return covered
+
+    @property
+    def empirical_coverage(self) -> float | None:
+        """The running fraction of `update()` calls that were covered, or None before any."""
+        return self.n_covered / self.n_updates if self.n_updates else None

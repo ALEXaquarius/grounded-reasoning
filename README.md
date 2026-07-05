@@ -213,6 +213,19 @@ spurious *added* edges dominate instead.
 [`redundancy_conformal_eval.py`](grounded_reasoning/experiments/redundancy_conformal_eval.py),
 PAPER.md §7.1's remark.
 
+**A different, orthogonal weakness — the noise level DRIFTING over time, not
+being heterogeneous — needs a different classical tool.** Split-conformal
+(and its Mondrian extension above) assumes calibration and test data share a
+distribution; that breaks if extraction quality changes between document
+batches. `AdaptiveConformalReasoner` (Adaptive Conformal Inference — Gibbs &
+Candès, 2021, classical, not new) updates its threshold from a stream of
+confirmed-true examples instead of freezing it after one calibration. When
+noise shifts partway through a stream (p_drop 0.05 → 0.45), a frozen
+threshold's coverage **collapses from 88.6% to 47.6%** — well below the 90%
+target, silently — while ACI recovers to **89.6%**, in 15/15 trials tested.
+[`drift_conformal_eval.py`](grounded_reasoning/experiments/drift_conformal_eval.py),
+PAPER.md §7.1's remark.
+
 ---
 
 ## Self-verification with NO external knowledge base (SGDC)
@@ -329,7 +342,7 @@ guarantee instead of hard precision.
 
 | Path | Content |
 |------|---------|
-| `grounded_reasoning/` | Public package — `GroundedReasoner`, `verify_relation`, `TOOL_SPEC`, `ConformalReasoner`, `LLMClient` |
+| `grounded_reasoning/` | Public package — `GroundedReasoner`, `verify_relation`, `TOOL_SPEC`, `ConformalReasoner`, `AdaptiveConformalReasoner`, `LLMClient` |
 | `grounded_reasoning/agent/{verifier,tool,mcp_server}.py` | Public API implementation — HallucinationGuard, function-calling tool, MCP server |
 | `grounded_reasoning/reasoning/abstract_inference.py` | FuzzyInferenceEngine, TypedInferenceEngine, HallucinationGuard (Theorem F) |
 | `grounded_reasoning/reasoning/operator_algebra.py` | Relation operator algebra (Theorem G) |
@@ -340,7 +353,7 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration — reused for both the transitivity assumption (Theorem M) and the normalization over-merge risk (Theorem N) |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
 | `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,self_grounded_calibration,nl_ontology,guard_cost,clutrr,conformal_llm,redundancy_conformal,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,self_grounded_calibration,nl_ontology,guard_cost,clutrr,conformal_llm,redundancy_conformal,drift_conformal,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo (real LLM, needs a key) |
 | `examples/self_grounded_demo.py` | SGDC (Theorem I): self-verify a model's own multi-hop claim with NO external KB (offline) |
 | `examples/rag_pipeline_demo.py` | `filter_claims` as a RAG/agent post-processing guard, heterogeneous claims (offline) |

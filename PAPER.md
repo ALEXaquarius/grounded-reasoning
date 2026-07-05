@@ -696,6 +696,48 @@ spurious *added* edges dominate instead (FPR *marginally worse*, 57.3% vs.
 is a targeted efficiency improvement for a specific, common noise mode, not
 a universal one.
 
+**Remark: a different, orthogonal weakness — a DRIFTING noise level, not a
+HETEROGENEOUS one — needs a different classical tool.** Both the base
+conformal reasoner and its Mondrian extension above assume calibration and
+test data are exchangeable (drawn from the same distribution). That
+assumption is violated, not just stressed, if the noise level *changes over
+time* — e.g. an LLM-extraction pipeline processing many document batches
+where later batches are cleaner or noisier than the batch used to calibrate.
+A frozen threshold then carries no guarantee once conditions shift, and
+nothing in either conformal variant above detects or corrects this.
+
+Adaptive Conformal Inference (ACI; Gibbs & Candès, 2021) — again classical,
+not new — replaces the frozen threshold with one that updates from a stream
+of confirmed-true examples: after each one, adjust an internal quantile
+level `α_t ← α_t + γ(α − err_t)` (`err_t = 0` if the example cleared the
+current threshold, else `1`), then recompute the threshold from a bounded
+window of recent scores at level `α_t`. ACI's own guarantee needs no
+stationarity or exchangeability assumption at all: the long-run average
+miscoverage rate converges to `α` for *any* score sequence, including
+adversarial drift — a strictly different (and, for this failure mode,
+strictly stronger) property than split-conformal's.
+
+Verified (`grounded_reasoning/experiments/drift_conformal_eval.py`,
+`tests/test_drift_conformal_eval.py`, 15 trials): a stream of query batches
+over random relation graphs, extracted cleanly (`p_drop=0.05`) for the first
+half of the stream, then noisily (`p_drop=0.45`) for the second half —
+
+| | Pre-shift coverage | Post-shift coverage (target ≥90%) |
+|---|---:|---:|
+| Frozen threshold (calibrated once, start of stream) | 88.6% | **47.6%** |
+| Adaptive (ACI) | 89.9% | **89.6%** |
+
+The frozen threshold collapses to less than half its target coverage the
+moment the noise level shifts — silently, with nothing in the frozen-
+threshold API signaling that its guarantee no longer holds. ACI recovers to
+within its own target band and stays there, in every one of the 15 trials
+tested. `AdaptiveConformalReasoner` (`grounded_reasoning/reasoning/conformal_reasoning.py`)
+exposes this as a drop-in alternative to `ConformalReasoner` for exactly this
+scenario — a different failure mode than Mondrian grouping addresses
+(heterogeneity within one static population), solved by a different
+classical tool, paired with this system's operator confidence the same way
+split-conformal itself was.
+
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 
 Turns the CLUTRR result of §4.4 into a theorem: closure learning is (i)
@@ -750,7 +792,7 @@ omnipotent oracle.
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
 - Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,guard_llm_stress_eval,nl_ontology_eval,guard_cost_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
-- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval}.py`
+- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval,drift_conformal_eval}.py`
 - Nine theorems (F–N): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
   invariant has a deterministic offline lock). Real-LLM experiments need

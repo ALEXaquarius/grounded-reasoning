@@ -214,6 +214,19 @@ là nguồn nhiễu chính thay vào đó.
 [`redundancy_conformal_eval.py`](grounded_reasoning/experiments/redundancy_conformal_eval.py),
 phần remark ở PAPER.md §7.1.
 
+**Một điểm yếu khác, độc lập — mức nhiễu TRÔI DẠT theo thời gian, không phải
+KHÔNG ĐỒNG NHẤT — cần một công cụ cổ điển khác.** Split-conformal (và bản mở
+rộng Mondrian ở trên) giả định calibration và test cùng một phân phối; điều
+đó bị phá vỡ nếu chất lượng trích xuất thay đổi giữa các lô tài liệu.
+`AdaptiveConformalReasoner` (Adaptive Conformal Inference — Gibbs & Candès,
+2021, cổ điển, không mới) cập nhật ngưỡng từ một luồng ví dụ đã xác nhận
+đúng, thay vì đóng băng sau 1 lần hiệu chỉnh. Khi nhiễu thay đổi giữa chừng
+luồng (p_drop 0.05 → 0.45), ngưỡng đóng băng **sụp coverage từ 88.6% xuống
+47.6%** — dưới xa mục tiêu 90%, một cách âm thầm — trong khi ACI phục hồi về
+**89.6%**, đúng trong cả 15/15 lượt thử.
+[`drift_conformal_eval.py`](grounded_reasoning/experiments/drift_conformal_eval.py),
+phần remark ở PAPER.md §7.1.
+
 ---
 
 ## Tự kiểm chứng KHÔNG cần knowledge-base ngoài (SGDC)
@@ -325,7 +338,7 @@ cần cấu hình.
 
 | Đường dẫn | Nội dung |
 |------|---------|
-| `grounded_reasoning/` | Package công khai — `GroundedReasoner`, `verify_relation`, `TOOL_SPEC`, `ConformalReasoner`, `LLMClient` |
+| `grounded_reasoning/` | Package công khai — `GroundedReasoner`, `verify_relation`, `TOOL_SPEC`, `ConformalReasoner`, `AdaptiveConformalReasoner`, `LLMClient` |
 | `grounded_reasoning/agent/{verifier,tool,mcp_server}.py` | Triển khai API công khai — HallucinationGuard, tool function-calling, MCP server |
 | `grounded_reasoning/reasoning/abstract_inference.py` | FuzzyInferenceEngine, TypedInferenceEngine, HallucinationGuard (Định lý F) |
 | `grounded_reasoning/reasoning/operator_algebra.py` | Đại số toán tử quan hệ (Định lý G) |
