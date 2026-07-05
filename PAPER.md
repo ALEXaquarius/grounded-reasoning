@@ -216,6 +216,13 @@ when the truth is 5–9); the guard restores precision to 100% without dropping
 a single correct answer. The guard's value is proportional to reasoning
 difficulty: harmless when the LLM is right, decisive when it collapses.
 
+(A fresh live reproduction of this same dense-DAG scenario — different
+session, different random draw — measured 30.7% precision, 106 hallucinations,
+guard 106/106; README.md cites that run under "Dense, anti-commonsense
+ontology." Both numbers are the same script, `nl_ontology_eval.run_dense`,
+sampled independently; the qualitative collapse-then-restore pattern is what's
+load-bearing, not the exact percentage.)
+
 ### 4.3 Token cost — `grounded_reasoning/experiments/guard_cost_eval.py`
 
 Measured live on DeepSeek (dense DAG, 6 questions), two ways to fix the same
