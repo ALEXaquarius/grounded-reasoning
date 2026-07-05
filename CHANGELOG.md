@@ -37,6 +37,25 @@ going forward; batching is preferred where it doesn't block real fixes).
   (88% empirical coverage over 200 trials against a 90% target) as well as a
   noisier, realistic comparison against a finite held-out test sample.
 
+### Fixed
+
+- **Hash-seed-dependent test/demo nondeterminism**: three places iterated a
+  Python `set` of *strings* (`edges` in `conformal_llm_eval.py`'s `render()`,
+  `gold` in `tests/test_conformal_llm.py`, and a `variants()` set in
+  `normalization_calibration_eval.py`) while consuming an RNG stream one draw
+  per item. Set iteration order is randomized per-process for `str`/`bytes`
+  keys (`PYTHONHASHSEED`) — unlike `int` keys, which hash deterministically —
+  so which RNG draw landed on which item, and hence the numeric/textual
+  outcome, silently varied by interpreter hash seed even with every
+  `random.Random(seed)` fixed. This is the confirmed root cause of the
+  intermittent, previously-unreproducible coverage-assertion failures seen
+  in `test_conformal_llm.py` and `test_normalization_calibration_eval.py`.
+  Fixed by wrapping each set in `sorted()` before iterating/sampling.
+  Verified: all three call paths now produce byte-identical output across 5+
+  distinct `PYTHONHASHSEED` values (previously varied on every one). Audited
+  every other `set`-of-strings iteration in the codebase (theorems, other
+  experiments, other tests) for the same pattern — none found.
+
 ## 0.1.6 — Theorem N: closing the other boundary (entity normalization)
 
 0.1.4 fixed the entity-identity gap (§5.3.1) with an opt-in `normalize=` hook,

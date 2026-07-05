@@ -67,7 +67,11 @@ def render(edges, words, rng, hard: bool = False) -> str:
             "Any {a} belongs to the category of {b}.",
             "Biologists classify each {a} as a type of {b}.",
         ]
-        lines = [rng.choice(templates).format(a=a, b=b) for a, b in edges]
+        # sorted: set iteration order is hash-seed-dependent, and each edge
+        # consumes one rng.choice() draw here, so an unsorted `edges` would
+        # make the rendered text (and hence extraction/scoring) depend on
+        # PYTHONHASHSEED even with a fixed rng seed.
+        lines = [rng.choice(templates).format(a=a, b=b) for a, b in sorted(edges)]
         for _ in range(max(1, len(edges) // 4)):
             a, b = rng.choice(words), rng.choice(words)
             lines.append(rng.choice([
@@ -83,7 +87,7 @@ def render(edges, words, rng, hard: bool = False) -> str:
         "Though it looks unusual, each {a} ultimately counts as one more {b}.",
         "Field guides note that a {a} — like others of its {b} lineage — molts yearly.",
     ]
-    lines = [rng.choice(hard_t).format(a=a, b=b) for a, b in edges]
+    lines = [rng.choice(hard_t).format(a=a, b=b) for a, b in sorted(edges)]  # sorted: see note above
     for _ in range(max(2, len(edges) // 2)):  # MANY near-miss sentences → induce false positives
         a, b = rng.choice(words), rng.choice(words)
         lines.append(rng.choice([

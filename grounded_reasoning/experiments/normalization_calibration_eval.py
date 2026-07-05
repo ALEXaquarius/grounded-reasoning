@@ -43,7 +43,11 @@ def build_world(seed: int, n_entities: int = 120, collision_rate: float = 0.06):
     entities = [f"Entity{i}" for i in range(n_entities)]
 
     def variants(e):
-        return list({e, e.upper(), "  " + e + "  ", e.replace("Entity", "entity ")})
+        # sorted, not list(a set literal): set iteration order is hash-seed-
+        # dependent, and rng.sample() below picks by POSITION, so an unsorted
+        # list here would make the SPECIFIC aliases chosen for each entity
+        # depend on PYTHONHASHSEED even with a fixed rng seed.
+        return sorted({e, e.upper(), "  " + e + "  ", e.replace("Entity", "entity ")})
 
     aliases = {e: rng.sample(variants(e), rng.randint(1, 3)) for e in entities}
 

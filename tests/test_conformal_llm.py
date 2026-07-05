@@ -16,7 +16,7 @@ def _coverage_under_drop(p_drop: float, alpha: float, seeds=range(12)) -> float:
         words, gold, reach = build_ontology(seed=1000 + k)
         rng = random.Random(500 + k)
         eng = FuzzyInferenceEngine(walk_len=12, alpha=0.7)
-        for a, b in gold:
+        for a, b in sorted(gold):  # sorted: set iteration order is hash-seed-dependent
             if rng.random() > p_drop:      # simulates the LLM dropping an edge (extraction noise)
                 eng.add_relation(a, b)
         infc = {x: eng.infer(x) for x in words}
