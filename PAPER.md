@@ -738,6 +738,57 @@ scenario — a different failure mode than Mondrian grouping addresses
 classical tool, paired with this system's operator confidence the same way
 split-conformal itself was.
 
+**Remark: identifying and removing the specific spurious edges responsible
+for false positives beats calibrating a threshold around them — but only
+by REMOVING them, not by grouping around them.** Every mechanism above
+(base conformal, Mondrian grouping, ACI) works *around* a noisy graph — none
+of them touch the graph's own structure. A natural question: can held-out
+labeled evidence instead identify *which specific edges* are spurious, and
+remove them outright?
+
+`identify_suspect_edges` (`grounded_reasoning/reasoning/negative_selection.py`)
+answers this with a simple decision rule — not a statistical guarantee like
+the Clopper-Pearson bounds elsewhere in this project — inspired by
+*negative selection* in adaptive immunity (a T-cell that reacts to the
+body's own tissue is eliminated during maturation on a single disqualifying
+encounter, not a statistical score): from held-out labeled `(subject,
+object, is_true)` triples, an edge that appears on the shortest proof path
+of at least one FALSE-labeled claim, and on NO TRUE-labeled claim's path, is
+removed from the graph entirely.
+
+The *first* way this "suspect edge" signal was tried was as a Mondrian
+`group_fn` (reusing the exact machinery above) rather than outright removal
+— and it was numerically **falsified**: at every noise level tested, FPR got
+*worse*, not better. The reason is structural, not incidental: Mondrian must
+still guarantee coverage *within* whatever group a claim falls into, and the
+"suspect" group is disproportionately false claims routed through a bad
+edge — satisfying coverage for the few true claims that also happen to
+cross it forces that group's own threshold down, admitting more of the
+group's false claims than the global threshold did. Outright removal has no
+such constraint: the few true claims that depended on the edge lose that
+specific path (a real, disclosed recall cost), but every false claim that
+depended on it loses its only support too.
+
+Verified (`grounded_reasoning/experiments/negative_selection_eval.py`,
+`tests/test_negative_selection.py`, 60 seeds/scenario across 5 noise
+regimes) — the strongest single efficiency result found in this line of
+exploration:
+
+| Noise regime | Raw FPR | Cleaned FPR | Coverage (raw / cleaned) |
+|---|---:|---:|---|
+| Dropout-dominant (p_drop=0.2, p_add=0.3) | 77.0% | **49.2%** | 91.0% / 90.0% |
+| Spurious-dominant (p_drop=0.0, p_add=0.3) | 58.7% | **15.7%** | 91.0% / 92.0% |
+| Heavy dropout (p_drop=0.3, p_add=0.3) | 81.6% | **58.9%** | 91.5% / 91.8% |
+| Light spurious (p_drop=0.2, p_add=0.1) | 85.8% | **51.4%** | 91.8% / 92.7% |
+| Heavy spurious (p_drop=0.2, p_add=0.5) | 68.4% | **52.8%** | 90.5% / 91.1% |
+
+Unlike `redundancy_group` (which helps only under dropout-dominant noise and
+gives essentially nothing under spurious-dominant noise), removal helps
+substantially in *every* regime tested — including the one redundancy
+grouping could not touch. The two are complementary, not competing: this
+targets specific corrupted edges from labeled evidence; redundancy grouping
+targets structural heterogeneity among otherwise-legitimate claims.
+
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 
 Turns the CLUTRR result of §4.4 into a theorem: closure learning is (i)
@@ -792,7 +843,7 @@ omnipotent oracle.
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
 - Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,guard_llm_stress_eval,nl_ontology_eval,guard_cost_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
-- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval,drift_conformal_eval}.py`
+- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval,drift_conformal_eval,negative_selection_eval}.py`
 - Nine theorems (F–N): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
   invariant has a deterministic offline lock). Real-LLM experiments need

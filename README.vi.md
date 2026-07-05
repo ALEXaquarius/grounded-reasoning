@@ -227,6 +227,21 @@ luồng (p_drop 0.05 → 0.45), ngưỡng đóng băng **sụp coverage từ 88.
 [`drift_conformal_eval.py`](grounded_reasoning/experiments/drift_conformal_eval.py),
 phần remark ở PAPER.md §7.1.
 
+**Kết quả hiệu quả mạnh nhất: xóa hẳn cạnh xấu thay vì hiệu chỉnh xung
+quanh nó.** `identify_suspect_edges` (lấy cảm hứng từ miễn dịch học: chọn
+lọc âm) xóa bất kỳ cạnh nào xuất hiện trên đường chứng minh của một claim
+SAI đã gán nhãn giữ riêng, và KHÔNG xuất hiện trên bất kỳ claim ĐÚNG nào —
+một luật quyết định đơn giản, không phải bảo đảm thống kê. Kiểm chứng qua
+5 mức nhiễu (60 seed mỗi mức): FPR giảm mạnh và nhất quán ở mọi nơi, VD
+**77.0% → 49.2%** (chủ yếu mất cạnh) và **58.7% → 15.7%** (chủ yếu cạnh giả
+— nơi `redundancy_group` gần như không giúp được gì) — coverage trên đồ thị
+còn lại gần như không đổi. Cách dùng tín hiệu này ĐẦU TIÊN — làm `group_fn`
+cho Mondrian thay vì xóa hẳn — đã bị **bác bỏ bằng số liệu**: làm FPR tệ hơn
+ở mọi mức nhiễu, vì Mondrian phải giữ coverage kể cả cho vài claim đúng hiếm
+hoi đi qua cạnh xấu, buộc ngưỡng của nhóm đó phải hạ xuống.
+[`negative_selection_eval.py`](grounded_reasoning/experiments/negative_selection_eval.py),
+phần remark ở PAPER.md §7.1.
+
 ---
 
 ## Tự kiểm chứng KHÔNG cần knowledge-base ngoài (SGDC)

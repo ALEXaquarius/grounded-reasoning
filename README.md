@@ -226,6 +226,22 @@ target, silently — while ACI recovers to **89.6%**, in 15/15 trials tested.
 [`drift_conformal_eval.py`](grounded_reasoning/experiments/drift_conformal_eval.py),
 PAPER.md §7.1's remark.
 
+**Strongest efficiency result: removing the specific bad edges beats calibrating
+around them.** `identify_suspect_edges` (immunology-inspired: negative
+selection) removes any edge that appears on a held-out FALSE-labeled claim's
+proof path and NO true-labeled claim's — a simple decision rule, not a
+statistical guarantee. Verified across 5 noise regimes (60 seeds each): FPR
+drops substantially and consistently everywhere, e.g. **77.0% → 49.2%**
+(dropout-dominant) and **58.7% → 15.7%** (spurious-dominant, where
+`redundancy_group` gives almost nothing) — coverage on the remaining graph
+essentially unaffected. The *first* way this signal was tried — as a
+Mondrian `group_fn` instead of outright removal — was numerically
+**falsified**: it made FPR worse at every noise level, because Mondrian must
+preserve coverage even for the few true claims that cross a bad edge,
+forcing that group's threshold down.
+[`negative_selection_eval.py`](grounded_reasoning/experiments/negative_selection_eval.py),
+PAPER.md §7.1's remark.
+
 ---
 
 ## Self-verification with NO external knowledge base (SGDC)
