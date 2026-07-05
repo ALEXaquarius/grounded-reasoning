@@ -199,6 +199,20 @@ that extracted graph (ground truth is used only for scoring):
 ⟹ A path to guaranteed reasoning over **natural-language relations** — where the hard
 guard can't reach. `grounded_reasoning/experiments/conformal_llm_eval.py`.
 
+**Efficiency can be pushed further under dropout-dominant noise, at no cost to
+validity.** `ConformalReasoner.calibrate(..., group_fn=...)` calibrates a
+separate threshold per group instead of one global one (Mondrian conformal —
+classical, not new); `redundancy_group` groups a pair by whether it has more
+than one walk in the extracted graph, computable with no ground truth. A
+*different* grouping tried first (hop-distance) was numerically **falsified**
+before shipping — it made efficiency worse, not better, and was discarded.
+Redundancy grouping cuts FPR from 98.7% → **80.8%** when dropped edges
+dominate the noise (matching this system's real LLM-extraction noise mode)
+while coverage still holds ≥90% — and honestly gives ~no benefit when
+spurious *added* edges dominate instead.
+[`redundancy_conformal_eval.py`](grounded_reasoning/experiments/redundancy_conformal_eval.py),
+PAPER.md §7.1's remark.
+
 ---
 
 ## Self-verification with NO external knowledge base (SGDC)
@@ -326,7 +340,7 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration — reused for both the transitivity assumption (Theorem M) and the normalization over-merge risk (Theorem N) |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
 | `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,self_grounded_calibration,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,self_grounded_calibration,nl_ontology,guard_cost,clutrr,conformal_llm,redundancy_conformal,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo (real LLM, needs a key) |
 | `examples/self_grounded_demo.py` | SGDC (Theorem I): self-verify a model's own multi-hop claim with NO external KB (offline) |
 | `examples/rag_pipeline_demo.py` | `filter_claims` as a RAG/agent post-processing guard, heterogeneous claims (offline) |

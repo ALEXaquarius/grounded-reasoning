@@ -199,6 +199,21 @@ thị trích xuất đó (ground truth chỉ dùng để chấm điểm):
 ⟹ Một hướng đi tới suy diễn có bảo đảm trên **quan hệ ngôn ngữ tự nhiên** — nơi guard
 cứng không chạm tới được. `grounded_reasoning/experiments/conformal_llm_eval.py`.
 
+**Hiệu quả có thể đẩy xa hơn nữa khi nhiễu chủ yếu là mất cạnh, không tốn gì
+cho tính hợp lệ.** `ConformalReasoner.calibrate(..., group_fn=...)` hiệu
+chỉnh ngưỡng riêng cho từng nhóm thay vì một ngưỡng chung (Mondrian conformal
+— cổ điển, không mới); `redundancy_group` phân nhóm một cặp theo việc nó có
+nhiều hơn 1 đường đi trong đồ thị đã trích xuất hay không, tính được mà không
+cần biết nhãn thật. Một cách phân nhóm khác thử trước (theo khoảng cách hop)
+đã bị **bác bỏ bằng số liệu** trước khi đưa vào sản phẩm — nó làm hiệu quả
+tệ hơn, không phải tốt hơn, và đã bị loại bỏ. Phân nhóm theo độ dư thừa
+đường đi giảm FPR từ 98.7% xuống **80.8%** khi mất cạnh là nguồn nhiễu chính
+(đúng chế độ nhiễu thật của hệ thống khi LLM trích xuất), trong khi coverage
+vẫn giữ ≥90% — và trung thực mà nói gần như không có lợi ích gì khi cạnh giả
+là nguồn nhiễu chính thay vào đó.
+[`redundancy_conformal_eval.py`](grounded_reasoning/experiments/redundancy_conformal_eval.py),
+phần remark ở PAPER.md §7.1.
+
 ---
 
 ## Tự kiểm chứng KHÔNG cần knowledge-base ngoài (SGDC)

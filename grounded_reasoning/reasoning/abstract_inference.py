@@ -91,6 +91,30 @@ class FuzzyInferenceEngine:
         """Inference confidence a → b (0 if no path exists)."""
         return self.infer(a).get(b, 0.0)
 
+    def path_multiplicity(self, a: str, b: str, max_len: int | None = None, cap: int = 5) -> int:
+        """
+        A bounded count of walks a→b of length <= max_len (default: self.walk_len),
+        capped at `cap` (only distinguishes "how much redundancy" up to a point,
+        not an exact count -- cheap DP, O(max_len * edges), no ground truth needed).
+
+        Used as a Mondrian/group-conditional conformal covariate: a pair reachable
+        via multiple independent walks is mechanically more robust to a single
+        random edge being dropped than a pair reachable via only one -- see
+        `grounded_reasoning.reasoning.conformal_reasoning.redundancy_group` and
+        `grounded_reasoning/experiments/redundancy_conformal_eval.py`.
+        """
+        limit = self.walk_len if max_len is None else max_len
+        cur: dict[str, int] = {a: 1}
+        total = 0
+        for _ in range(limit):
+            nxt: dict[str, int] = {}
+            for u, c in cur.items():
+                for v in self._edges.get(u, {}):
+                    nxt[v] = min(cap, nxt.get(v, 0) + c)
+            total = min(cap, total + nxt.get(b, 0))
+            cur = nxt
+        return total
+
     def explain(self, a: str, b: str) -> list[str] | None:
         """
         EXPLAIN the inference: returns the shortest a → b path (BFS) via >=1 STEP,

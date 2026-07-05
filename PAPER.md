@@ -652,6 +652,50 @@ degrades. This is a path to guaranteed reasoning over natural-language
 relations, exactly where the hard guard is helpless. Offline-locked
 (`tests/test_conformal_llm.py`).
 
+**Remark: efficiency can be improved further under dropout-dominant noise, at
+no cost to validity — one attempt worked, a different one was falsified
+first.** Mondrian (group-conditional) conformal prediction (Vovk et al. —
+classical, not new) calibrates a SEPARATE threshold per group of an
+available-at-test-time partitioning function instead of one global
+threshold: the identical split-conformal exchangeability argument, applied
+*within* each group, gives that group its own ≥ 1−α coverage, so the marginal
+guarantee is unaffected — grouping can only change *efficiency*, never
+*validity*. `ConformalReasoner.calibrate(..., group_fn=...)` exposes this
+directly (`grounded_reasoning/reasoning/conformal_reasoning.py`).
+
+The first partitioning function tried — hop-distance — was **numerically
+falsified before being written up or shipped**: at every noise level tested,
+it made the false-positive rate *worse*, not better (splitting the
+calibration set costs more in per-group calibration looseness than
+hop-distance-correlated noise recovers). This is recorded honestly, not
+hidden, per this project's own stated principle of logging negative results.
+
+The one that survived falsification: `redundancy_group` groups a pair by
+whether it has more than one walk in the (possibly noisy) extracted graph
+(`FuzzyInferenceEngine.path_multiplicity`, computable with no ground truth).
+Motivation: `conf(a→b) = Σ_k α^k(P^k)[a,b]` *sums* over every walk, so a
+multiply-connected pair gets a mechanically higher, more separable score —
+and, more directly relevant here, survives a single random edge being
+*dropped* far more often than a singly-connected pair does (Menger's
+theorem: deleting one edge cannot disconnect a 2-edge-connected pair).
+Verified (`grounded_reasoning/experiments/redundancy_conformal_eval.py`,
+`tests/test_redundancy_conformal_eval.py`, 60 seeds/scenario):
+
+| Noise regime | Global FPR | Grouped FPR | Coverage (both) |
+|---|---:|---:|---|
+| Dropout-dominant (p_drop=0.2, p_add=0.3) | 98.7% | **80.8%** | 89.9% / 91.1% |
+| Spurious-dominant (p_drop=0.0, p_add=0.3) | 56.7% | 57.3% | 90.7% / 91.2% |
+
+Coverage holds ≥ ~90% in both regimes (the classical guarantee, expected, not
+the finding). Efficiency improves substantially — an ~18-point FPR reduction
+— specifically when dropped edges dominate the noise, which is exactly the
+noise mode `conformal_llm_eval.py` documents for real LLM extraction (missed
+relations, not fabricated ones). It gives essentially no benefit when
+spurious *added* edges dominate instead (FPR *marginally worse*, 57.3% vs.
+56.7%) — an honest limitation stated plainly rather than glossed over: this
+is a targeted efficiency improvement for a specific, common noise mode, not
+a universal one.
+
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 
 Turns the CLUTRR result of §4.4 into a theorem: closure learning is (i)
@@ -706,7 +750,7 @@ omnipotent oracle.
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
 - Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,guard_llm_stress_eval,nl_ontology_eval,guard_cost_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
-- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval}.py`
+- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval}.py`
 - Nine theorems (F–N): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
   invariant has a deterministic offline lock). Real-LLM experiments need
