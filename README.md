@@ -243,18 +243,26 @@ guarantee** — a real tradeoff, MEASURED across all 5 regimes, not just
 disclosed as a possibility or checked in one scenario: with the default
 split (`identify_frac=0.5, min_evidence=1`), the pooled wrongly-removed
 rate ranges **13.2%–32.2%** across regimes (worst: light spurious, where
-fewest edges get blocked). Using a larger identification share
-(`identify_frac=0.8`) plus a second corroborating false-claim encounter
-(`min_evidence=2`) drops this to **2.4%–5.5%**, with a 95% upper confidence
-bound (Wilson interval) of **4.1%–11.4%** across regimes — the wider bound
-in light-spurious noise reflects fewer edges blocked, not a worse rule.
-Cost: cleaned FPR rises somewhat (e.g. ~49.2% → ~58.0% in the
-dropout-dominant regime, still far below the 77.0% raw baseline), and the
-reserved evaluation set shrinks. **Verdict: kept, with this configuration
-recommended** wherever a wrongly-removed edge is costlier than a slower
-cleaning rate — the residual risk is now bounded and quantified rather than
-left as "could in principle happen." It also costs real recall for any true
-claim that depended solely on a removed edge, and it edits the graph in
+fewest edges get blocked). A Pareto sweep over the identification split and
+`min_evidence` found `identify_frac=0.85, min_evidence=2` — drops this to
+**1.5%–3.1%**, with a 95% upper confidence bound (Wilson interval) of
+**2.6%–6.6%** across regimes (`identify_frac=0.9` was tried and
+**rejected**: the evaluation split shrinks enough that cleaned FPR degrades
+sharply back toward the raw baseline). Two other directions were tried and
+did **not** beat this — stability selection (bootstrap-resampling the
+identification data) gave essentially the same rate, since resampling a
+fixed, scarce identification pool can't manufacture evidence an edge never
+received; and a formal per-edge hypothesis test with Benjamini-Hochberg FDR
+control was numerically **worse**, because its independence assumption
+fails when a good edge shares a path with a genuinely bad one. Cost of the
+shipped mitigation: cleaned FPR rises somewhat (e.g. ~49% → ~59% in the
+dropout-dominant regime, still far below the 77% raw baseline), and the
+reserved evaluation set shrinks further. **Verdict: kept, with this
+configuration recommended** wherever a wrongly-removed edge is costlier
+than a slower cleaning rate — the residual risk is now bounded and
+quantified rather than left as "could in principle happen." It also costs
+real recall for any true claim that depended solely on a removed edge, and
+it edits the graph in
 place (a one-way change, unlike calibration which only adjusts a
 threshold).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),

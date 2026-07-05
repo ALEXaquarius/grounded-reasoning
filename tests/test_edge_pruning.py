@@ -89,10 +89,10 @@ def test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate():
     res = run_mitigation_comparison(n_seeds=40)
     for regime, configs in res.items():
         default = configs["default (identify_frac=0.5, min_evidence=1)"]
-        safer = configs["safer (identify_frac=0.8, min_evidence=2)"]
+        safer = configs["safer (identify_frac=0.85, min_evidence=2)"]
         assert safer["pooled_wrongly_blocked_rate"] < default["pooled_wrongly_blocked_rate"], f"{regime}: {configs}"
         # worst measured regime (light spurious, fewest edges blocked) still
-        # stays under a 20% 95%-upper-confidence-bound on the wrongly-blocked rate
-        assert safer["wrongly_blocked_upper_bound"] < 0.20, f"{regime}: {safer}"
+        # stays under a 95%-upper-confidence-bound on the wrongly-blocked rate
+        assert safer["wrongly_blocked_upper_bound"] < 0.15, f"{regime}: {safer}"
         # the mitigation still cleans meaningfully, just less aggressively
         assert safer["cleaned_fpr"] < safer["raw_fpr"], f"{regime}: {safer}"

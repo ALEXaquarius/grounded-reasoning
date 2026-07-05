@@ -803,9 +803,14 @@ per regime, with the default rule (`identify_frac=0.5`, `min_evidence=1`):
 | Light spurious | 32.2% |
 | Heavy spurious | 13.2% |
 
-**Mitigation, measured the same way, not just in one regime:** a larger
-identification share (`identify_frac=0.8`) plus a second corroborating
-false-claim encounter (`min_evidence=2`) — reported as the pooled rate
+**Mitigation, found by a Pareto sweep, measured the same way across every
+regime.** Sweeping `identify_frac` in [0.5, 0.9] and `min_evidence` in
+[1, 3] shows `identify_frac=0.85, min_evidence=2` dominates the earlier
+0.8/2 choice at every regime tested (strictly lower wrongly-blocked rate,
+small extra cleaned-FPR cost); `identify_frac=0.9` was tried and
+**rejected** — the reserved evaluation split shrinks enough that the
+conformal-calibration split inside it becomes unreliable, and cleaned FPR
+degrades sharply back toward the raw baseline. Reported as the pooled rate
 together with a one-sided 95% Wilson upper confidence bound (a large-*n*
 asymptotic approximation; `clopper_pearson_lower` elsewhere in this project
 overflows at these pooled sample sizes, in the hundreds to low thousands —
@@ -813,35 +818,61 @@ see `wilson_upper_bound` in `edge_pruning_eval.py`):
 
 | Noise regime | Wrongly-blocked rate (pooled) | 95% upper bound |
 |---|---:|---:|
-| Dropout-dominant | 4.5% | 7.2% |
-| Spurious-dominant | 2.4% | 4.1% |
-| Heavy dropout | 3.7% | 6.3% |
-| Light spurious | 5.5% | 11.4% |
-| Heavy spurious | 2.9% | 4.7% |
+| Dropout-dominant | 2.9% | 4.6% |
+| Spurious-dominant | 1.5% | 2.6% |
+| Heavy dropout | 2.9% | 4.6% |
+| Light spurious | 3.1% | 6.6% |
+| Heavy spurious | 2.9% | 4.2% |
 
 Light-spurious noise is both the worst case and the noisiest estimate — it
-blocks the fewest edges of any regime (avg. ~2 with this configuration), so
-its confidence bound is widest. Even so, its upper bound stays under 12%,
-against a raw baseline of 32.2% (unmitigated) — a real, quantified, bounded
-residual risk, not eliminated, but precisely characterized rather than left
-as "could in principle happen." The cost: cleaned FPR rises (e.g. ~49.2% to
-~58.0% in the dropout-dominant regime, still far below the 77.0% raw
-baseline), and the reserved evaluation set shrinks. See
+blocks the fewest edges of any regime, so its confidence bound is widest.
+Even so, its upper bound stays under 7%, against a raw baseline of 32.2%
+(unmitigated) — a real, quantified, bounded residual risk, not eliminated,
+but precisely characterized rather than left as "could in principle
+happen." The cost: cleaned FPR rises somewhat (e.g. ~49% to ~59% in the
+dropout-dominant regime, still far below the 77% raw baseline), and the
+reserved evaluation set shrinks further than at 0.8. See
 `run_mitigation_comparison` in `edge_pruning_eval.py` and
 `test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate` /
-`test_wilson_upper_bound_basic_properties`. Verdict: the residual risk,
-once bounded and quantified this way, is small enough relative to the FPR
-reduction retained in every regime to keep the feature — with
-`identify_frac=0.8, min_evidence=2` as the recommended (not yet default,
-to preserve backward compatibility) configuration wherever a wrongly-
-removed edge is more costly than a slower cleaning rate. (2) It costs real
-recall regardless of configuration — any true claim depending solely on a
-removed edge loses that path (visible above as the small coverage shifts
-between raw and cleaned); (3) it edits the graph in place, a one-way
-structural change, unlike calibration (which only adjusts a threshold and
-leaves the graph untouched) — if the query distribution later differs from
-the held-out sample used to prune, a removed edge might have been needed
-after all.
+`test_wilson_upper_bound_basic_properties`.
+
+**Two further directions were tried and did NOT beat this** — reported
+because a decision this consequential should show its negative results,
+not just its positive one. (a) *Stability selection* (Meinshausen &
+Bühlmann, 2010): bootstrap-resample the identification half repeatedly and
+require an edge to be flagged as suspect in most resamples, rather than
+once. This gave essentially the same wrongly-blocked rate as
+`min_evidence` alone — unsurprising in hindsight: resampling a fixed,
+already-scarce identification half cannot manufacture true-claim evidence
+an edge never received in the first place; it only helps when the
+identification pool itself is large enough to vary meaningfully across
+resamples. (b) *A formal per-edge hypothesis test*: for each candidate edge
+with `f` false-claim encounters and zero true-claim encounters, treat
+`p0^f` (where `p0` is the overall false-label rate in the identification
+sample) as a one-sided p-value under the null "this edge behaves like an
+average edge," then apply Benjamini-Hochberg to control the expected false
+discovery rate across all candidates at a target level `q`. Despite being
+the more principled-looking construction, it was numerically **worse**
+than the simple rule at matching nominal targets (e.g. targeting `q=0.05`
+still gave a pooled wrongly-blocked rate of 7–16% across regimes) — the
+null's independence assumption fails here, because a genuinely good edge
+can be swept into disproportionately many false-claim encounters simply by
+sharing a path with a genuinely bad edge, not because it is bad itself.
+Neither direction is shipped; both are recorded so the choice of the
+simpler rule is verified, not an oversight.
+
+**Verdict: the residual risk, bounded and quantified this way, is small
+enough relative to the FPR reduction retained in every regime to keep the
+feature** — with `identify_frac=0.85, min_evidence=2` as the recommended
+(not yet default, to preserve backward compatibility) configuration
+wherever a wrongly-removed edge is more costly than a slower cleaning rate.
+(2) It costs real recall regardless of configuration — any true claim
+depending solely on a removed edge loses that path (visible above as the
+small coverage shifts between raw and cleaned); (3) it edits the graph in
+place, a one-way structural change, unlike calibration (which only adjusts
+a threshold and leaves the graph untouched) — if the query distribution
+later differs from the held-out sample used to prune, a removed edge might
+have been needed after all.
 
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 

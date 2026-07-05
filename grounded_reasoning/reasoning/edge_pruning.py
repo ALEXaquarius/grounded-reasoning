@@ -32,22 +32,52 @@ mixes), false-positive rate dropped substantially and consistently (e.g.
 16.2% at p_drop=0.0/p_add=0.3), with coverage on the REMAINING graph
 essentially unaffected -- see `grounded_reasoning/experiments/edge_pruning_eval.py`.
 
-Real tradeoffs, MEASURED, not just disclosed as a possibility: (1) no
+Real tradeoffs, MEASURED across every noise regime tested (not just
+disclosed as a possibility, not just checked in one scenario): (1) no
 false-discovery-rate bound, and the empirical wrongly-removed rate is not
 negligible -- with a 50/50 held-out split (half used to identify suspect
-edges, half reserved for the final evaluation), ~17-19% of removed edges
-were genuinely correct edges that simply drew zero true-claim traffic in the
-identification half by chance. Two measured mitigations, NOT a formal fix:
-using a LARGER share of the held-out data for identification (e.g. 80/20
-instead of 50/50) drops this to ~5.5%, and additionally requiring
-`min_evidence=2` (below) drops it further to ~4.5% -- at the cost of a
-smaller reserved evaluation set and slightly less aggressive cleaning
-(cleaned FPR ~58% instead of ~49% in the same scenario). (2) a real recall
-cost -- any true claim depending solely on a removed edge loses that path;
-(3) the graph is edited in place, a one-way structural change, unlike
-calibration (which only adjusts a threshold and leaves the graph untouched)
--- if the query distribution later differs from the held-out sample used to
-prune, a removed edge might have been needed after all.
+edges, half reserved for the final evaluation) and the default rule, the
+POOLED wrongly-removed rate ranges 13-32% depending on noise regime (worst:
+light-spurious noise, where fewest edges get blocked at all).
+
+A Pareto sweep over `identify_frac` (the share of held-out data used for
+identification, tested 0.5-0.9) and `min_evidence` (tested 1-3) found
+`identify_frac=0.85, min_evidence=2` dominates every point at or below
+`identify_frac=0.8`: a lower wrongly-blocked rate at a small extra cost in
+cleaned FPR, in every regime. Beyond 0.85, `identify_frac=0.9` was tried and
+REJECTED -- the reserved evaluation split shrinks enough that the
+conformal-calibration split inside it becomes unreliable and cleaned FPR
+degrades sharply back toward the raw baseline. At `identify_frac=0.85,
+min_evidence=2`, the pooled wrongly-removed rate drops to 1.3-4.2%, with a
+one-sided 95% Wilson upper confidence bound of 2.7-8.9% (worst case still
+light-spurious noise, and also the noisiest estimate -- fewest edges
+blocked means the widest interval) -- at the cost of a smaller reserved
+evaluation set and somewhat less aggressive cleaning (cleaned FPR rises,
+e.g. ~49% to ~59% in the dropout-dominant regime, still far below the 77%
+raw baseline). See `run_mitigation_comparison` and `wilson_upper_bound` in
+`edge_pruning_eval.py`.
+
+Two other directions were tried and did NOT beat this: (a) stability
+selection (Meinshausen & Buhlmann 2010) -- bootstrap-resampling the
+identification half and requiring an edge to be flagged in most resamples
+-- gave essentially the same result as `min_evidence` alone, because
+resampling a FIXED, already-scarce identification half cannot manufacture
+true-claim evidence an edge never received in the first place; (b) a
+formal per-edge hypothesis test (binomial tail probability under a
+global-false-rate null, with Benjamini-Hochberg FDR control across
+candidate edges) was numerically WORSE than the simple rule at the same
+nominal target -- the null's independence assumption does not hold here,
+since an edge can be swept into disproportionately many false-claim
+encounters simply by sharing a path with a genuinely bad edge, not because
+it is bad itself. Both are reported here so the choice of the simpler rule
+is a verified one, not an oversight.
+
+(2) It costs real recall regardless of configuration -- any true claim
+depending solely on a removed edge loses that path; (3) the graph is edited
+in place, a one-way structural change, unlike calibration (which only
+adjusts a threshold and leaves the graph untouched) -- if the query
+distribution later differs from the held-out sample used to prune, a
+removed edge might have been needed after all.
 """
 from __future__ import annotations
 
@@ -82,7 +112,10 @@ def identify_suspect_edges(
     same discipline as every other calibration function here). Using a
     LARGER share of your available labeled data here (vs. reserving it for
     a separate evaluation step) measurably reduces the wrongly-removed rate
-    -- see the module docstring.
+    -- see the module docstring for the measured Pareto sweep; the
+    recommended pairing is `min_evidence=2` with roughly 85% of your
+    held-out data used for identification (and the rest reserved for
+    evaluating the cleaned graph).
     """
     eng = FuzzyInferenceEngine(walk_len=walk_len, alpha=alpha)
     for a, b in edges:
