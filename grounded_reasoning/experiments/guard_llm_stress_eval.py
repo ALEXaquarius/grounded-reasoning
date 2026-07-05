@@ -149,10 +149,13 @@ def run(seeds=range(5), n: int = 48, temperature: float = 0.7,
     a plain chat model — bump this if the model in use has extended thinking
     enabled, or calls may time out mid-run.
     max_queries_per_trial: if set, subsamples each trial's query list down to
-    this many questions (ALWAYS keeping every guaranteed-empty trap query,
-    since those are the cheapest, highest-signal hallucination check) — use
-    this to keep a live run's wall-clock time bounded when each LLM call is
-    slow, at the cost of a smaller sample.
+    this many questions — use this to keep a live run's wall-clock time
+    bounded when each LLM call is slow, at the cost of a smaller sample. At
+    most HALF the budget goes to guaranteed-empty trap queries (the cheapest,
+    highest-signal hallucination check); the rest goes to ordinary queries
+    with non-empty ground truth, so precision/recall stay well-defined
+    (an all-trap sample has zero true positives by construction, making
+    "precision" undefined rather than informative).
     """
     from grounded_reasoning.reasoning.llm_client import DeepSeekClient
 
@@ -173,8 +176,12 @@ def run(seeds=range(5), n: int = 48, temperature: float = 0.7,
         if max_queries_per_trial is not None and len(queries) > max_queries_per_trial:
             traps = [q for q in queries if q[1] in roots and not q[2]]
             rest = [q for q in queries if not (q[1] in roots and not q[2])]
-            budget = max(0, max_queries_per_trial - len(traps))
-            queries = traps + rng.sample(rest, k=min(budget, len(rest)))
+            trap_budget = max_queries_per_trial // 2
+            trap_sample = (
+                rng.sample(traps, k=trap_budget) if len(traps) > trap_budget else traps
+            )
+            rest_budget = max_queries_per_trial - len(trap_sample)
+            queries = trap_sample + rng.sample(rest, k=min(rest_budget, len(rest)))
 
         for kind, person, truth in queries:
             n_queries += 1
@@ -199,7 +206,10 @@ def run(seeds=range(5), n: int = 48, temperature: float = 0.7,
             guard_dropped_true += len((claimed & truth) - kept)
 
     def prf(tp, fp, fn):
-        p = tp / max(tp + fp, 1)
+        # precision is UNDEFINED (not "bad") when tp+fp == 0 -- e.g. an
+        # all-trap sample has no true positives by construction. Report None
+        # rather than a misleading 0.0 in that case.
+        p = tp / (tp + fp) if (tp + fp) else None
         r = tp / max(tp + fn, 1)
         return p, r
 
@@ -208,25 +218,30 @@ def run(seeds=range(5), n: int = 48, temperature: float = 0.7,
     res = {
         "n_trials": len(list(seeds)), "n_queries": n_queries, "temperature": temperature,
         "n_trap_queries": n_trap_queries, "n_trap_hallucinated": n_trap_hallucinated,
-        "llm_precision": round(lp, 3), "llm_recall": round(lr, 3),
-        "llm_hallucinations": llm_fp,
-        "guarded_precision": round(gp, 3), "guarded_recall": round(gr, 3),
+        "llm_precision": round(lp, 3) if lp is not None else None,
+        "llm_recall": round(lr, 3), "llm_hallucinations": llm_fp,
+        "guarded_precision": round(gp, 3) if gp is not None else None,
+        "guarded_recall": round(gr, 3),
         "guard_caught": llm_fp - g_fp, "guard_leaked": g_fp,
         "guard_dropped_true": guard_dropped_true,
         "llm_tokens": client.total_tokens,
     }
     if verbose:
         print(json.dumps(res, indent=2))
+        lp_s = f"{lp:.1%}" if lp is not None else "n/a (no true positives sampled)"
+        gp_s = f"{gp:.1%}" if gp is not None else "n/a (no true positives sampled)"
         print(
             f"\nHARDER stress test ({res['n_trials']} trials x {n} people, T={temperature}, "
             f"distractor sibling/spouse facts, shuffled prose):\n"
-            f"Raw LLM: precision={lp:.1%} recall={lr:.1%} "
+            f"Raw LLM: precision={lp_s} recall={lr:.1%} "
             f"({llm_fp} hallucinated names total, {n_trap_hallucinated}/{n_trap_queries} "
             f"guaranteed-empty TRAP questions hallucinated).\n"
-            f"After GUARD: precision={gp:.1%} "
+            f"After GUARD: precision={gp_s} "
             f"(caught {llm_fp - g_fp}/{max(llm_fp, 1)} hallucinations, {g_fp} leaked, "
             f"{guard_dropped_true} correct answers wrongly dropped).\n"
-            + ("✔ guard precision = 100% even under stress\n" if gp >= 0.999 - 1e-9
+            # the REAL success criterion is zero leakage, not the precision ratio
+            # (which is undefined, not "bad", when no true positives were sampled)
+            + ("✔ guard leaked 0 hallucinations even under stress\n" if g_fp == 0
                else "✘ GUARD LEAK — this is a real bug, not expected noise\n")
         )
     return res
