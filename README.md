@@ -269,6 +269,7 @@ guarantee instead of hard precision.
 | `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
 | `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,nl_ontology,guard_cost,clutrr,conformal_llm,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo (real LLM, needs a key) |
+| `examples/self_grounded_demo.py` | SGDC (Theorem I): self-verify a model's own multi-hop claim with NO external KB (offline) |
 | `examples/rag_pipeline_demo.py` | `filter_claims` as a RAG/agent post-processing guard, heterogeneous claims (offline) |
 | `examples/calibration_demo.py` | Theorem M + N side by side: measuring transitivity and normalization trust instead of assuming it (offline) |
 | `examples/conformal_demo.py` | Coverage guarantee vs. noise tradeoff, clean vs. noisy graph side by side (offline) |

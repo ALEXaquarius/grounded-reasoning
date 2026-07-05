@@ -266,6 +266,7 @@ cần cấu hình.
 | `grounded_reasoning/theory/theorems.py` | **Chín định lý (F–N)** với kiểm chứng số |
 | `grounded_reasoning/experiments/*.py` | Thực nghiệm LLM thật và benchmark hậu thuẫn mọi khẳng định trên |
 | `examples/hallucination_demo.py` | Demo function-calling đầu-cuối (LLM thật, cần key) |
+| `examples/self_grounded_demo.py` | SGDC (Định lý I): tự kiểm chứng claim nhiều bước của model, KHÔNG cần KB ngoài (offline) |
 | `examples/rag_pipeline_demo.py` | `filter_claims` làm guard hậu-xử-lý cho pipeline RAG/agent, claim quan hệ khác loại (offline) |
 | `examples/calibration_demo.py` | Định lý M + N cạnh nhau: đo lường độ tin cậy bắc cầu và chuẩn hóa thay vì giả định (offline) |
 | `examples/conformal_demo.py` | Đánh đổi coverage vs. nhiễu, so sánh đồ thị sạch và đồ thị nhiễu cạnh nhau (offline) |
