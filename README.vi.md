@@ -227,8 +227,11 @@ cần cấu hình.
 | `grounded_reasoning/reasoning/conformal_reasoning.py` | Conformal — bảo đảm coverage dưới nhiễu (Định lý K) |
 | `grounded_reasoning/reasoning/composition_algebra.py` | Học bảng hợp thành, kiểm chứng trên CLUTRR (Định lý J) |
 | `grounded_reasoning/reasoning/horn.py` | Suy diễn tiến Horn, ngữ nghĩa least-model (Định lý L) |
+| `grounded_reasoning/reasoning/llm_client.py` | LLM client không phụ thuộc nhà cung cấp (key đọc từ biến môi trường) |
 | `grounded_reasoning/theory/theorems.py` | **Bảy định lý (F–L)** với kiểm chứng số |
 | `grounded_reasoning/experiments/*.py` | Thực nghiệm LLM thật và benchmark hậu thuẫn mọi khẳng định trên |
+| `examples/hallucination_demo.py` | Demo function-calling đầu-cuối |
+| `examples/quickstart.ipynb` | Tour chạy được của thư viện (offline, sẵn sàng cho Colab) |
 
 ---
 
