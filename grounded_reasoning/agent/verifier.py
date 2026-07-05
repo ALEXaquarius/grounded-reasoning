@@ -195,6 +195,16 @@ class GroundedReasoner:
         capability at the facade, adding proof-path reconstruction, which
         `follow` (a pure reachability check) does not provide.
 
+        IMPORTANT: even with a single relation, this is NOT the same as
+        `verify(via=rel)`. `verify_path(a, b, via=["parent"])` requires EXACTLY
+        one `parent` hop; `verify(a, b, via="parent")` accepts ANY number of
+        hops (the transitive closure). `verify_path(a, b, via=["parent"]*3)`
+        requires EXACTLY three hops, not "three or more".
+
+        Does not consult `transitive_relations=` (that gate's semantics are
+        about repeatedly composing ONE relation with itself, which does not
+        apply to a fixed heterogeneous sequence used once each).
+
         Raises ValueError if `via` is empty.
         """
         if not via:
@@ -221,9 +231,9 @@ class GroundedReasoner:
     ) -> dict:
         """
         Calibrate confidence for a FIXED heterogeneous path pattern (Theorem M
-        generalized — see its docstring and PAPER.md §5.3.2's remark; not a new
-        theorem, since nothing in Clopper-Pearson's argument is specific to a
-        single relation's closure). From held-out (subject, object,
+        generalized — see PAPER.md §5.3.4's remark; not a new theorem, since
+        nothing in Clopper-Pearson's argument is specific to a single
+        relation's closure). From held-out (subject, object,
         is_actually_true) triples, tallies pairs `verify_path` marks
         `grounded=True` for the exact sequence `via` and computes an exact
         lower confidence bound on how many are actually true.
@@ -246,12 +256,20 @@ class GroundedReasoner:
         Filter a BATCH of LLM claims (subject, obj[, via]) — keep the grounded
         ones, block hallucinations. Returns [(claim, Verdict)]. 0 tokens,
         precision guaranteed.
+
+        `via` may be a single relation name or `None` (dispatched to `verify`,
+        a closure), or a list of relation names (dispatched to `verify_path`,
+        an exact heterogeneous sequence) — so a batch can freely mix claims of
+        both kinds.
         """
         out = []
         for c in claims:
             subj, obj = c[0], c[1]
             via = c[2] if len(c) > 2 else None
-            out.append((c, self.verify(subj, obj, via=via)))
+            if isinstance(via, list):
+                out.append((c, self.verify_path(subj, obj, via)))
+            else:
+                out.append((c, self.verify(subj, obj, via=via)))
         return out
 
     def calibrate_transitivity(

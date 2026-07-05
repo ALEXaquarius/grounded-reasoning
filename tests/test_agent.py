@@ -46,6 +46,18 @@ class TestGroundedReasoner:
         res = gr.filter_claims([("alice", "dave", "parent"), ("alice", "zed", "parent")])
         assert res[0][1].grounded and not res[1][1].grounded
 
+    def test_filter_claims_dispatches_heterogeneous_via_lists(self):
+        # a via=[...] list in a claim dispatches to verify_path, not verify --
+        # a batch can freely mix single-relation and heterogeneous claims.
+        gr = GroundedReasoner()
+        gr.add_facts([("Alice", "parent", "Bob"), ("Bob", "employer", "AcmeCorp")])
+        res = gr.filter_claims([
+            ("Alice", "AcmeCorp", ["parent", "employer"]),
+            ("Alice", "AcmeCorp", ["employer", "parent"]),  # wrong order
+        ])
+        assert res[0][1].grounded and res[0][1].proof == ["Alice", "Bob", "AcmeCorp"]
+        assert not res[1][1].grounded
+
     def test_contradiction_detection(self):
         gr = GroundedReasoner()
         gr.add_facts([("cat", "isa", "mammal"), ("mammal", "isa", "animal"),
@@ -329,6 +341,26 @@ class TestHeterogeneousPathVerification:
         v = gr.verify_path("Alice", "AcmeCorp", via=["parent", "employer"])
         assert v.grounded and v.proof == ["Alice", "Bob", "AcmeCorp"]
 
+    def test_exact_hop_count_not_closure_even_for_a_single_relation(self):
+        # a documented gotcha: verify_path(via=["parent"]) is NOT the same as
+        # verify(via="parent") -- it requires EXACTLY one hop, not "any number".
+        gr = GroundedReasoner()
+        gr.add_facts([("a", "parent", "b"), ("b", "parent", "c"), ("c", "parent", "d")])
+        assert gr.verify("a", "d", via="parent").grounded          # closure: any depth
+        assert not gr.verify_path("a", "d", via=["parent"]).grounded    # exactly 1 hop
+        assert not gr.verify_path("a", "d", via=["parent", "parent"]).grounded  # exactly 2
+        assert gr.verify_path("a", "d", via=["parent", "parent", "parent"]).grounded  # exactly 3
+        assert gr.verify_path("a", "c", via=["parent", "parent"]).grounded  # exactly 2 -> c
+
+    def test_ignores_transitive_relations_allowlist(self):
+        # transitive_relations gates repeated composition of ONE relation with
+        # itself (verify(via=rel)); it does not apply to a fixed heterogeneous
+        # sequence used once each, so verify_path must not consult it.
+        gr = GroundedReasoner(transitive_relations={"is_a"})  # "parent"/"employer" NOT declared
+        gr.add_facts([("Alice", "parent", "Bob"), ("Bob", "employer", "AcmeCorp")])
+        v = gr.verify_path("Alice", "AcmeCorp", via=["parent", "employer"])
+        assert v.grounded
+
 
 class TestPathCalibration:
     """calibrate_path generalizes calibrate_transitivity (Theorem M) to a fixed
@@ -351,4 +383,16 @@ class TestPathCalibration:
         # ("A1","Z", ...) has no parent->employer path -- excluded, not a violation
         labeled = [("A1", "C1", True), ("A1", "Z", False)]
         res = gr.calibrate_path(["parent", "employer"], labeled, alpha=0.1)
+        assert res["n_grounded"] == 1 and res["n_confirmed"] == 1
+
+    def test_respects_entity_normalization(self):
+        gr = GroundedReasoner(normalize=lambda s: s.strip().casefold())
+        gr.add_facts([("Alice", "parent", "Bob"), ("bob", "employer", "AcmeCorp")])
+        res = gr.calibrate_path(["parent", "employer"], [("Alice", "AcmeCorp", True)], alpha=0.1)
+        assert res["n_grounded"] == 1 and res["n_confirmed"] == 1
+
+    def test_bypasses_the_transitive_relations_allowlist(self):
+        gr = GroundedReasoner(transitive_relations={"is_a"})  # "parent"/"employer" undeclared
+        gr.add_facts([("Alice", "parent", "Bob"), ("Bob", "employer", "AcmeCorp")])
+        res = gr.calibrate_path(["parent", "employer"], [("Alice", "AcmeCorp", True)], alpha=0.1)
         assert res["n_grounded"] == 1 and res["n_confirmed"] == 1
