@@ -746,15 +746,12 @@ of them touch the graph's own structure. A natural question: can held-out
 labeled evidence instead identify *which specific edges* are spurious, and
 remove them outright?
 
-`identify_suspect_edges` (`grounded_reasoning/reasoning/negative_selection.py`)
-answers this with a simple decision rule — not a statistical guarantee like
-the Clopper-Pearson bounds elsewhere in this project — inspired by
-*negative selection* in adaptive immunity (a T-cell that reacts to the
-body's own tissue is eliminated during maturation on a single disqualifying
-encounter, not a statistical score): from held-out labeled `(subject,
-object, is_true)` triples, an edge that appears on the shortest proof path
-of at least one FALSE-labeled claim, and on NO TRUE-labeled claim's path, is
-removed from the graph entirely.
+`identify_suspect_edges` (`grounded_reasoning/reasoning/edge_pruning.py`)
+answers this with a simple decision rule — **not** a statistical guarantee
+like the Clopper-Pearson bounds elsewhere in this project: from held-out
+labeled `(subject, object, is_true)` triples, an edge that appears on the
+shortest proof path of at least one FALSE-labeled claim, and on NO
+TRUE-labeled claim's path, is removed from the graph entirely.
 
 The *first* way this "suspect edge" signal was tried was as a Mondrian
 `group_fn` (reusing the exact machinery above) rather than outright removal
@@ -769,8 +766,8 @@ such constraint: the few true claims that depended on the edge lose that
 specific path (a real, disclosed recall cost), but every false claim that
 depended on it loses its only support too.
 
-Verified (`grounded_reasoning/experiments/negative_selection_eval.py`,
-`tests/test_negative_selection.py`, 60 seeds/scenario across 5 noise
+Verified (`grounded_reasoning/experiments/edge_pruning_eval.py`,
+`tests/test_edge_pruning.py`, 60 seeds/scenario across 5 noise
 regimes) — the strongest single efficiency result found in this line of
 exploration:
 
@@ -788,6 +785,18 @@ substantially in *every* regime tested — including the one redundancy
 grouping could not touch. The two are complementary, not competing: this
 targets specific corrupted edges from labeled evidence; redundancy grouping
 targets structural heterogeneity among otherwise-legitimate claims.
+
+**The tradeoffs, stated plainly (this is a decision rule, not a proof).**
+Unlike every calibration method elsewhere in this project, this one carries
+no probabilistic bound: (1) there is no false-discovery-rate guarantee — with
+a small or unrepresentative held-out sample, a genuinely correct edge could
+in principle be removed; (2) it costs real recall — any true claim depending
+solely on a removed edge loses that path (visible above as the small
+coverage shifts between raw and cleaned); (3) it edits the graph in place, a
+one-way structural change, unlike calibration (which only adjusts a
+threshold and leaves the graph untouched) — if the query distribution later
+differs from the held-out sample used to prune, a removed edge might have
+been needed after all.
 
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 
@@ -843,7 +852,7 @@ omnipotent oracle.
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
 - Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,guard_llm_stress_eval,nl_ontology_eval,guard_cost_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
-- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval,drift_conformal_eval,negative_selection_eval}.py`
+- Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval,drift_conformal_eval,edge_pruning_eval}.py`
 - Nine theorems (F–N): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
   invariant has a deterministic offline lock). Real-LLM experiments need

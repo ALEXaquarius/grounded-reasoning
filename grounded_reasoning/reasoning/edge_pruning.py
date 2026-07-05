@@ -1,15 +1,14 @@
 """
-Negative-Selection Edge Pruning — identify and remove specific SPURIOUS
+Held-Out-Evidence Edge Pruning — identify and remove specific SPURIOUS
 edges from a noisy relation graph, using held-out labeled evidence, instead
 of only recalibrating a threshold around them.
 
-Motivation (immunology-inspired framing, not new math): in adaptive immunity,
-T-cells that react to the body's OWN tissue ("self") are eliminated during
-maturation (negative selection) -- a cell is judged not by a statistical
-score but by a single disqualifying encounter. Applied here: a graph edge
-that appears on the proof path of at least one held-out labeled claim known
-to be FALSE, and on the proof path of NO held-out claim known to be TRUE, is
-judged spurious and removed outright -- not merely down-weighted or grouped.
+The rule: from held-out labeled (subject, object, is_actually_true) triples
+— ground truth known INDEPENDENTLY of the graph, same convention as
+`calibrate_transitivity`'s `labeled_pairs` — an edge is removed if it
+appears on the shortest proof path of at least one FALSE-labeled pair and on
+the proof path of NO TRUE-labeled pair. Not merely down-weighted or
+grouped: removed outright.
 
 Why removal, not Mondrian grouping: `ConformalReasoner.calibrate(...,
 group_fn=...)` (see conformal_reasoning.py) still has to guarantee coverage
@@ -22,16 +21,25 @@ identified edge from the graph avoids this entirely: the few true claims
 that depended on it lose that specific path (a real, disclosed recall cost),
 but every false claim that depended on it loses its only support too.
 
-This is a simple decision rule (any single disqualifying encounter vetoes an
-edge, unless "exonerated" by at least one true-claim encounter), not a
-statistical guarantee like the Clopper-Pearson bounds elsewhere in this
-project -- there is no claimed false-discovery-rate control here. It is
-verified empirically instead: over 30-80 seeds across 6 noise regimes
+This is a simple decision rule (any single disqualifying encounter removes
+an edge, unless offset by at least one true-claim encounter on the SAME
+edge), NOT a statistical guarantee like the Clopper-Pearson bounds elsewhere
+in this project -- there is no claimed false-discovery-rate control here.
+It is verified empirically instead: over 30-80 seeds across 6 noise regimes
 (dropout-dominant, spurious-dominant, and mixes), false-positive rate
 dropped substantially and consistently (e.g. 76.8% -> 50.0% at
 p_drop=0.2/p_add=0.3, winning in 69/80 trials; 58.9% -> 16.2% at
 p_drop=0.0/p_add=0.3), with coverage on the REMAINING graph essentially
-unaffected -- see `grounded_reasoning/experiments/negative_selection_eval.py`.
+unaffected -- see `grounded_reasoning/experiments/edge_pruning_eval.py`.
+
+Real tradeoffs (not hidden): (1) no false-discovery-rate bound -- with a
+small or unrepresentative held-out sample, a genuinely correct edge could
+in principle be removed; (2) a real recall cost -- any true claim depending
+solely on a removed edge loses that path; (3) the graph is edited in place,
+a one-way structural change, unlike calibration (which only adjusts a
+threshold and leaves the graph untouched) -- if the query distribution
+later differs from the held-out sample used to prune, a removed edge might
+have been needed after all.
 """
 from __future__ import annotations
 
@@ -61,7 +69,7 @@ def identify_suspect_edges(
         eng.add_relation(a, b)
 
     true_votes: dict[tuple[str, str], int] = {}
-    blocked: set[tuple[str, str]] = set()
+    suspect: set[tuple[str, str]] = set()
     for subject, obj, is_true in labeled_pairs:
         path = eng.explain(subject, obj)
         if path is None:
@@ -71,8 +79,8 @@ def identify_suspect_edges(
             for e in path_edges:
                 true_votes[e] = true_votes.get(e, 0) + 1
         else:
-            blocked |= path_edges
-    return {e for e in blocked if true_votes.get(e, 0) == 0}
+            suspect |= path_edges
+    return {e for e in suspect if true_votes.get(e, 0) == 0}
 
 
 def prune_edges(

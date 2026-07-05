@@ -1,6 +1,6 @@
 """
-Negative-selection edge pruning vs. the raw noisy graph — an A/B comparison
-across 6 noise regimes, reported honestly (this is the strongest single
+Held-out-evidence edge pruning vs. the raw noisy graph — an A/B comparison
+across 5 noise regimes, reported honestly (this is the strongest single
 efficiency finding in the project's exploration of conformal-efficiency
 improvements, and it is reported as such, not downplayed).
 
@@ -11,18 +11,18 @@ labeled evidence identify and remove the SPECIFIC spurious edges responsible
 for false positives, rather than just calibrating a threshold that tolerates
 them?
 
-`identify_suspect_edges` (grounded_reasoning/reasoning/negative_selection.py)
-implements a simple decision rule (immunology-inspired framing, not a
-statistical guarantee): an edge that appears on the shortest proof path of a
-held-out FALSE-labeled claim, and NEVER on a held-out TRUE-labeled claim's
-path, is removed. A DIFFERENT way of using this same "suspect edge" signal
-was tried first -- as a Mondrian group_fn (see redundancy_conformal_eval.py
-for that machinery) -- and made FPR WORSE at every noise level tested,
-because Mondrian must preserve coverage even for the few true claims that
-happen to route through a bad edge, forcing that group's own threshold down.
-Direct removal has no such constraint and is what this experiment verifies.
+`identify_suspect_edges` (grounded_reasoning/reasoning/edge_pruning.py)
+implements a simple decision rule, not a statistical guarantee: an edge that
+appears on the shortest proof path of a held-out FALSE-labeled claim, and
+NEVER on a held-out TRUE-labeled claim's path, is removed. A DIFFERENT way
+of using this same "suspect edge" signal was tried first -- as a Mondrian
+group_fn (see redundancy_conformal_eval.py for that machinery) -- and made
+FPR WORSE at every noise level tested, because Mondrian must preserve
+coverage even for the few true claims that happen to route through a bad
+edge, forcing that group's own threshold down. Direct removal has no such
+constraint and is what this experiment verifies.
 
-Run: python -m grounded_reasoning.experiments.negative_selection_eval
+Run: python -m grounded_reasoning.experiments.edge_pruning_eval
 (fully offline -- synthetic ground truth, no LLM call.)
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ import random
 
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 from grounded_reasoning.reasoning.conformal_reasoning import conformal_threshold
-from grounded_reasoning.reasoning.negative_selection import identify_suspect_edges, prune_edges
+from grounded_reasoning.reasoning.edge_pruning import identify_suspect_edges, prune_edges
 
 
 def build_true_dag(seed: int, n: int = 45):
@@ -149,7 +149,7 @@ def run(n_seeds: int = 60, alpha: float = 0.1) -> dict:
 def main() -> None:
     res = run()
     print("=" * 88)
-    print("Negative-selection edge pruning (held-out evidence) vs. the raw noisy graph")
+    print("Held-out-evidence edge pruning vs. the raw noisy graph")
     print("=" * 88)
     for label, m in res.items():
         print(f"\n-- {label} --")
@@ -160,7 +160,7 @@ def main() -> None:
         "\n=> Removing held-out-evidence-flagged suspect edges substantially and consistently\n"
         "   cuts false-positive rate across every noise regime tested -- coverage on the\n"
         "   remaining graph is essentially unaffected. This is a simple decision rule\n"
-        "   (any single disqualifying encounter vetoes an edge), not a statistical\n"
+        "   (any single disqualifying encounter removes an edge), not a statistical\n"
         "   guarantee like the Clopper-Pearson bounds elsewhere in this project."
     )
 

@@ -1,11 +1,11 @@
 """
-Offline tests for negative_selection.py (identify_suspect_edges/prune_edges)
-and negative_selection_eval.py's A/B comparison. Fully synthetic, no
+Offline tests for edge_pruning.py (identify_suspect_edges/prune_edges)
+and edge_pruning_eval.py's A/B comparison. Fully synthetic, no
 LLM/network needed.
 """
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
-from grounded_reasoning.reasoning.negative_selection import identify_suspect_edges, prune_edges
-from grounded_reasoning.experiments.negative_selection_eval import run
+from grounded_reasoning.reasoning.edge_pruning import identify_suspect_edges, prune_edges
+from grounded_reasoning.experiments.edge_pruning_eval import run
 
 
 def test_blocks_a_spurious_edge_with_zero_true_support():

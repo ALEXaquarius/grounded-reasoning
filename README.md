@@ -227,19 +227,24 @@ target, silently — while ACI recovers to **89.6%**, in 15/15 trials tested.
 PAPER.md §7.1's remark.
 
 **Strongest efficiency result: removing the specific bad edges beats calibrating
-around them.** `identify_suspect_edges` (immunology-inspired: negative
-selection) removes any edge that appears on a held-out FALSE-labeled claim's
-proof path and NO true-labeled claim's — a simple decision rule, not a
-statistical guarantee. Verified across 5 noise regimes (60 seeds each): FPR
-drops substantially and consistently everywhere, e.g. **77.0% → 49.2%**
-(dropout-dominant) and **58.7% → 15.7%** (spurious-dominant, where
-`redundancy_group` gives almost nothing) — coverage on the remaining graph
-essentially unaffected. The *first* way this signal was tried — as a
-Mondrian `group_fn` instead of outright removal — was numerically
-**falsified**: it made FPR worse at every noise level, because Mondrian must
-preserve coverage even for the few true claims that cross a bad edge,
-forcing that group's threshold down.
-[`negative_selection_eval.py`](grounded_reasoning/experiments/negative_selection_eval.py),
+around them.** `identify_suspect_edges` removes any edge that appears on a
+held-out FALSE-labeled claim's proof path and NO true-labeled claim's — a
+simple decision rule, not a statistical guarantee. Verified across 5 noise
+regimes (60 seeds each): FPR drops substantially and consistently
+everywhere, e.g. **77.0% → 49.2%** (dropout-dominant) and **58.7% → 15.7%**
+(spurious-dominant, where `redundancy_group` gives almost nothing) —
+coverage on the remaining graph essentially unaffected. The *first* way this
+signal was tried — as a Mondrian `group_fn` instead of outright removal —
+was numerically **falsified**: it made FPR worse at every noise level,
+because Mondrian must preserve coverage even for the few true claims that
+cross a bad edge, forcing that group's threshold down. Unlike every
+calibration method above, this one carries **no false-discovery-rate
+guarantee** — a real tradeoff, not hidden: with a small or unrepresentative
+held-out sample an edge could in principle be wrongly removed, it costs real
+recall for any true claim that depended solely on that edge, and it edits
+the graph in place (a one-way change, unlike calibration which only adjusts
+a threshold).
+[`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 PAPER.md §7.1's remark.
 
 ---
