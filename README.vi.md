@@ -201,6 +201,58 @@ cứng không chạm tới được. `grounded_reasoning/experiments/conformal_l
 
 ---
 
+## Tự kiểm chứng KHÔNG cần knowledge-base ngoài (SGDC)
+
+Guard ở trên vẫn cần *một* đồ thị quan hệ nào đó được cung cấp. Self-Grounded
+Deductive Consistency (Định lý I) bỏ luôn yêu cầu đó: khai thác việc LLM
+thường chính xác ở **fact 1-hop (atomic)** nhưng hay ảo giác khi **hợp thành**.
+Lấy chính các fact 1-hop mà model tự khẳng định, dựng closure từ CHÍNH chúng,
+rồi loại bỏ bất kỳ kết luận nhiều bước nào của model không nằm trong closure
+của chính nó — tự mâu thuẫn là tín hiệu ảo giác, không cần đối chiếu nguồn
+ngoài.
+
+```python
+from grounded_reasoning import GroundedReasoner
+
+# fact 1-hop của CHÍNH LLM (không có KB ngoài) -- chấp nhận nguyên văn
+gr = GroundedReasoner()
+gr.add_facts([("sparrow", "is_a", "bird"), ("bird", "is_a", "animal")])
+
+# kết luận nhiều bước của CHÍNH LLM, tự kiểm chứng với fact của chính nó
+gr.verify("sparrow", "animal", via="is_a")   # grounded=True: tự nhất quán
+gr.verify("sparrow", "plant",  via="is_a")   # grounded=False: tự mâu thuẫn, bị chặn
+```
+
+| | precision | recall |
+|---|---:|---:|
+| Nhiều bước thô (LLM) | 78% | 87% |
+| **SGDC (self-grounded, không kiến thức ngoài)** | **100%** | 72% |
+| Trần: lọc bằng đồ thị ngoài | 100% | 87% |
+
+Cái giá trung thực là recall (72% so với 87%): tự đóng khá bảo thủ. Và
+precision=1.0 của Định lý I là **có điều kiện** — chỉ đúng khi fact 1-hop của
+chính model là chuẩn xác; ở domain phản trực giác (VD "cá voi là một loài cá"),
+precision atomic có thể tụt, kéo theo recall cũng tụt (PAPER.md §6 ghi nhận
+điều này trung thực, không giấu đi).
+
+**Giả định đó cũng đo được, không cần thêm code.**
+`gr.calibrate_transitivity(rel, labeled_pairs)` (Định lý M) không quan tâm
+fact của `gr` đến từ KB ngoài hay từ chính model tự khẳng định — nên gọi nó
+trên một reasoner xây hoàn toàn từ fact tự thân của LLM sẽ hiệu chỉnh được
+precision THỰC của SGDC, đo từ dữ liệu giữ riêng, thay vì giả định fact atomic
+chuẩn xác. Ở một domain tổng hợp với 15% fact atomic bị cố tình làm sai,
+precision thực của SGDC tụt còn ~74% (**KHÔNG PHẢI** ~85% như suy đoán ngây
+thơ — một cạnh atomic sai có thể lan vào nhiều claim nhiều bước, khuếch đại
+thiệt hại), và cận hiệu chỉnh giữ đúng dưới mức đó trong 98.3% lượt thử —
+[`self_grounded_calibration_eval.py`](grounded_reasoning/experiments/self_grounded_calibration_eval.py),
+phần remark ở PAPER.md §6.
+
+Chạy được ngay: [`examples/self_grounded_demo.py`](examples/self_grounded_demo.py)
+(offline) · trên DeepSeek thật:
+`grounded_reasoning/experiments/self_grounded_eval.py`.
+
+---
+
 ## Bắt đầu nhanh
 
 ```bash

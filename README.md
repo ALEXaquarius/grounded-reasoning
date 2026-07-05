@@ -201,6 +201,59 @@ guard can't reach. `grounded_reasoning/experiments/conformal_llm_eval.py`.
 
 ---
 
+## Self-verification with NO external knowledge base (SGDC)
+
+The guard above needs *some* relation graph handed to it. Self-Grounded
+Deductive Consistency (Theorem I) removes even that: it exploits the fact
+that LLMs are reliably accurate on **atomic (1-hop) facts** but hallucinate on
+**composition**. Take the model's own confident 1-hop facts, build the
+operator closure from *those*, then reject any of the model's own multi-hop
+conclusions that fall outside its *own* closure — self-contradiction is the
+hallucination signal, not disagreement with an external source.
+
+```python
+from grounded_reasoning import GroundedReasoner
+
+# the LLM's OWN atomic facts (no external KB) -- taken at face value
+gr = GroundedReasoner()
+gr.add_facts([("sparrow", "is_a", "bird"), ("bird", "is_a", "animal")])
+
+# the LLM's OWN multi-hop conclusion, self-verified against ITS OWN facts above
+gr.verify("sparrow", "animal", via="is_a")   # grounded=True: self-consistent
+gr.verify("sparrow", "plant",  via="is_a")   # grounded=False: self-contradiction, blocked
+```
+
+| | precision | recall |
+|---|---:|---:|
+| Raw multi-hop (LLM) | 78% | 87% |
+| **SGDC (self-grounded, zero external knowledge)** | **100%** | 72% |
+| Ceiling: filtering with an external graph | 100% | 87% |
+
+The honest cost is recall (72% vs. 87%): self-closure is conservative. And
+Theorem I's precision=1.0 is *conditional* — it holds if the model's own
+atomic facts are sound; in a counter-prior domain (e.g. "a whale is a fish"),
+atomic precision itself can drop, and recall suffers with it (PAPER.md §6
+records this honestly rather than hiding it).
+
+**That assumption can be measured too, with zero new code.**
+`gr.calibrate_transitivity(rel, labeled_pairs)` (Theorem M) doesn't care
+whether `gr`'s facts came from an external KB or the model's own atomic
+self-assertions — so calling it on a reasoner built purely from an LLM's own
+facts calibrates SGDC's *actual* output precision directly, from held-out
+evidence, instead of assuming atomic soundness. In a synthetic domain with
+15% of the atomic facts deliberately wrong, SGDC's real precision fell to
+~74% (**not** the naively-expected ~85% — a single wrong atomic edge
+composes into several downstream claims, amplifying its damage), and the
+calibrated bound correctly stayed below that in 98.3% of trials —
+[`self_grounded_calibration_eval.py`](grounded_reasoning/experiments/self_grounded_calibration_eval.py),
+PAPER.md §6's remark.
+
+Runnable: [`examples/self_grounded_demo.py`](examples/self_grounded_demo.py)
+(offline) · live on DeepSeek:
+`grounded_reasoning/experiments/self_grounded_eval.py`.
+
+---
+
 ## Quickstart
 
 ```bash
