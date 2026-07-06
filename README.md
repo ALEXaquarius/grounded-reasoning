@@ -244,21 +244,27 @@ it's the path of least resistance), it drops to **1.5%–3.1%** (95% upper
 confidence bound 2.6%–6.6%), at the cost of cleaned FPR rising somewhat
 (e.g. ~49% → ~59% in the dropout-dominant regime, still far below the 77%
 raw baseline) and a smaller reserved evaluation set. Checked against a real
-LLM (DeepSeek), not just simulated noise: the blocking decision stays
-accurate on real hallucinations, but the downstream FPR benefit held in
-only ~73% of random evaluation splits on a densely-hallucinated,
-hub-node-heavy real scenario — reliable on the regime it was measured on
-(locally-random 1-hop noise), not guaranteed to generalize beyond it. A
-deterministic (no ML) refinement for that specific hub-heavy case,
-`identify_and_prune_edges(..., use_propagation=True)`, blocks ~2.6× more
-real hallucinated edges there at the same reliability and a slightly
-better mean FPR, with no regression on the synthetic benchmark — opt-in,
-since the benefit is specific to hub-heavy graphs. A learned (logistic
-regression) alternative was also tried and rejected: it failed to
-generalize from synthetic training data to the real data at all. It also
-costs real recall for any true claim that depended solely on a removed
-edge, and it edits the graph in place (a one-way change, unlike
-calibration which only adjusts a threshold).
+LLM (DeepSeek), not just simulated noise, on data where each candidate
+edge is backed by exactly one labeled encounter (no query repeated — the
+realistic case for a deployment that verifies each claim once): the
+count-based rules above (`min_evidence≥2`, and its hub-aware
+`use_propagation=True` variant) never fire at all on this regime, since
+they require an edge to independently clear the evidence bar twice, which
+never happens with single-encounter evidence. Lowering to
+`min_evidence=1` does block real hallucinated edges, but on its own makes
+downstream FPR *worse* than doing nothing (63.0% → 70.7%, beats raw in
+only 4/15 splits) — traced to the diffusion engine's row-normalization
+concentrating transition probability onto a source's surviving edges once
+its OTHER edges are pruned. Pairing that same blocking decision with
+`masked_infer` (normalizes by each source's pre-prune degree, so removal
+only ever removes confidence mass, never redistributes it) recovers a
+real improvement: 63.0% → 54.0%, beats raw in 12/15 splits, with no
+regression on the synthetic benchmark. A learned (logistic regression)
+alternative was also tried and rejected: it failed to generalize from
+synthetic training data to the real data at all. Pruning also costs real
+recall for any true claim that depended solely on a removed edge, and it
+edits the graph in place (a one-way change, unlike calibration which only
+adjusts a threshold).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 [`edge_pruning_llm_eval.py`](grounded_reasoning/experiments/edge_pruning_llm_eval.py),
 PAPER.md §7.1's remark.

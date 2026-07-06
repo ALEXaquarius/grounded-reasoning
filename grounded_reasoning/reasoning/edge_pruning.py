@@ -58,26 +58,57 @@ distribution later differs from the held-out sample used to prune, a
 removed edge might have been needed after all.
 
 SCOPE, checked against a REAL LLM (DeepSeek, not just simulated noise) --
-see `edge_pruning_llm_eval.py`: on a densely-hallucinated multi-hop-shortcut
-scenario, the blocking decision stayed accurate on real hallucinations,
-matching the synthetic benchmark's precision, but the improvement in
-downstream FPR held in only 73% of random identify/eval splits of that
-data (mean 69.6% -> 63.5%), not the near-universal win measured on the
-synthetic benchmark. This mitigation's benefit should therefore NOT be
-assumed to generalize beyond the regime it was measured in
-(locally-random 1-hop noise at moderate density) -- a dense, hub-heavy
-hallucination pattern still helps more often than not, but needs its own
-validation before relying on it.
+see `edge_pruning_llm_eval.py`: an EARLIER pass of this validation had a
+node-namespace bug that silently merged distinct per-query DAGs together,
+inflating per-edge evidence counts with spurious cross-query overlap
+(fixed -- see CHANGELOG/git history). Re-run on correctly-namespaced real
+data (each query's DAG genuinely disjoint, matching how a real deployment
+issues independent queries), the picture differs materially from what
+synthetic noise predicts: with each candidate edge backed by EXACTLY one
+labeled encounter (no query repeated), `min_evidence` thresholds of 2+ --
+including `identify_suspect_edges_propagated` below, whose magnet
+mechanism needs some edge to first clear that bar -- never fire at all (0
+edges blocked, a pure no-op on this data). Lowering to `min_evidence=1`
+does block real hallucinated edges, but on THIS regime -- many distinct
+source nodes, each with several direct 1-hop shortcut claims, mostly
+false -- makes downstream FPR WORSE than doing nothing (beat raw in only
+4/15 splits, mean FPR 63.0% -> 70.7%), not better.
+
+Traced to `FuzzyInferenceEngine`'s row-normalized diffusion (P = D^-1 W):
+a reserved (never-blocked) edge's score is proportional to
+1/out-degree(source); removing that SAME source's OTHER (blocked) edges
+mechanically concentrates transition mass onto whatever the source has
+left, inflating the score of any still-present false edge -- worse the
+MORE aggressively a source's edges get pruned, which is exactly what
+happens on this hub/multi-shortcut-per-source topology. This is a
+structural cost of REMOVING edges outright on this graph shape, not a
+defect in which specific edges get chosen. `masked_infer` below sidesteps
+it by normalizing each source's transition probabilities by its ORIGINAL
+out-degree (from the full, unpruned edge list) -- removing a blocked edge
+then only ever REMOVES its confidence mass, never redistributes it onto
+surviving edges. Paired with the plain `min_evidence=1` rule on this same
+corrected data, it recovers a genuine improvement: beats raw in 12/15
+splits, mean FPR 63.0% -> 54.0% (vs. `min_evidence=1` alone making FPR
+*worse*). On the synthetic benchmark (5 regimes, 60 seeds each) it is
+statistically indistinguishable from ordinary pruned-graph scoring -- no
+regression -- since that benchmark's noise is sparse per-node, giving the
+degree-concentration effect little room to act either way. Use
+`masked_infer` for scoring whenever pruning is applied to a graph built
+from many direct, per-source shortcut claims (e.g. an LLM's own
+multi-hop over-claims); plain post-prune scoring remains fine for
+generic, locally-random noise.
 
 A topology-aware variant (requiring less evidence to remove an edge
-pointing at a high-centrality "hub" node, more for a peripheral one, since
-a bad hub-attachment does outsized damage) was tried against both
-benchmarks: on the synthetic one it was statistically indistinguishable
-from just raising `min_evidence` uniformly (no real structural gain); on
-the real hallucination data it touched ~5x fewer edges for comparable or
-slightly better mean FPR, but did not improve the underlying 73% split
-reliability. Not adopted -- a different tradeoff point (much less graph
-editing), not a resolved improvement.
+pointing at a high-centrality "hub" node, more for a peripheral one) and
+`identify_suspect_edges_propagated` below were both measured as real
+improvements over the plain rule in an earlier pass over this real data --
+but that pass used the since-corrected, namespace-buggy dataset, and
+neither improvement reproduced on the fix (both depend on some edge
+individually clearing `min_evidence>=2`, which never happens here -- see
+above). They are kept for graphs where an edge genuinely does get
+independently corroborated 2+ times (still help there, and do not
+regress the synthetic benchmark), but neither is a fix for the
+single-encounter regime `masked_infer` targets.
 """
 from __future__ import annotations
 
@@ -174,18 +205,26 @@ def identify_suspect_edges_propagated(
     that other suspicious-looking edges into the SAME target are not
     just identification noise.
 
-    Measured (`edge_pruning_eval.py` / `edge_pruning_llm_eval.py`): on the
-    synthetic benchmark (identify_frac=0.85, 200 seeds/regime),
-    essentially identical to `identify_suspect_edges(min_evidence=2)` --
-    sparse, locally-random noise rarely puts multiple suspect edges on
-    the same target, so the propagation step rarely fires (no
-    regression). On the real DeepSeek hallucination data (hub-node-heavy
-    by construction), it blocks ~2.6x more edges than the plain rule
-    while keeping the pooled wrongly-blocked rate low (~3.4%) and the
-    same 11/15 (73%) split-reliability against the raw graph, with a
-    slightly better mean FPR (62.0% vs 63.5%) -- a real, deterministic
-    improvement on the specific regime the plain rule was weakest on, not
-    a full fix (the underlying 73% reliability is unchanged, not solved).
+    Measured (`edge_pruning_eval.py`): on the synthetic benchmark
+    (identify_frac=0.85, 200 seeds/regime), essentially identical to
+    `identify_suspect_edges(min_evidence=2)` -- sparse, locally-random
+    noise rarely puts multiple suspect edges on the same target, so the
+    propagation step rarely fires (no regression).
+
+    On real DeepSeek hallucination data where each candidate edge is
+    backed by only ONE labeled encounter (the realistic case when queries
+    aren't repeated -- see `edge_pruning_llm_eval.py`), this function's
+    magnet mechanism never fires at all: it requires some edge to first
+    independently clear `min_evidence` (default 2), which never happens
+    when no edge ever gets a second vote, so it degenerates to a pure
+    no-op there. An EARLIER pass measured a real improvement on this same
+    real data, but that pass used a dataset with a node-namespace bug
+    that spuriously inflated per-edge evidence counts above 1 (fixed --
+    see CHANGELOG/git history); the improvement did not reproduce once
+    fixed. Kept for graphs where an edge genuinely IS independently
+    corroborated 2+ times (still helps there, and does not regress the
+    synthetic benchmark) -- for the single-encounter, hub-heavy real
+    regime, see `masked_infer` below instead (module docstring above).
     """
     eng = FuzzyInferenceEngine(walk_len=walk_len, alpha=alpha)
     for a, b in edges:
@@ -223,6 +262,69 @@ def prune_edges(
     return [e for e in edges if e not in blocked]
 
 
+def masked_infer(
+    edges: list[tuple[str, str]],
+    blocked: set[tuple[str, str]],
+    source: str,
+    walk_len: int = 8,
+    alpha: float = 0.6,
+) -> dict[str, float]:
+    """
+    An alternative to running `FuzzyInferenceEngine.infer` on
+    `prune_edges(edges, blocked)`: mirrors that same diffusion exactly,
+    except each node's transition probabilities are normalized by its
+    ORIGINAL out-degree (computed from the full `edges`, including
+    blocked ones) instead of the degree of the pruned graph -- so
+    removing a blocked edge only ever REMOVES its confidence mass, never
+    redistributes it onto the source's surviving edges.
+
+    Why this matters (see the module docstring's real-data discussion):
+    plain post-prune scoring's transition probabilities are `P = D^-1 W`
+    on the PRUNED graph, so a source's out-degree shrinks by however many
+    of its edges got blocked -- concentrating its remaining transition
+    mass onto whatever edges are left, including any still-present false
+    edge that individual voting didn't happen to block. This is a real
+    cost, not a corner case, on a graph built from many direct,
+    per-source shortcut claims (e.g. an LLM's own multi-hop over-claims):
+    measured on real DeepSeek hallucination data where each candidate
+    edge is backed by only one labeled encounter, plain `min_evidence=1`
+    pruning made downstream FPR WORSE than no pruning at all (63.0% ->
+    70.7%, beating raw in only 4/15 splits), while `masked_infer` on the
+    SAME blocked set recovered a genuine improvement (63.0% -> 54.0%,
+    12/15). On the synthetic benchmark (5 regimes, 60 seeds each) it is
+    statistically indistinguishable from plain post-prune scoring -- no
+    regression -- since that benchmark's noise is sparse per-node, giving
+    the concentration effect little room to act either way.
+
+    `blocked` need not come from any specific function above -- any
+    edge subset works, since this only changes how transition
+    probabilities are normalized, not which edges are considered removed.
+    """
+    raw: dict[str, dict[str, float]] = {}
+    for a, b in edges:
+        raw.setdefault(a, {})
+        raw[a][b] = raw[a].get(b, 0.0) + 1.0
+    adj: dict[str, list[tuple[str, float]]] = {}
+    for u, nbrs in raw.items():
+        deg = sum(nbrs.values()) or 1.0  # ORIGINAL degree -- includes blocked edges
+        adj[u] = [(v, w / deg) for v, w in nbrs.items() if (u, v) not in blocked]
+
+    x = {source: 1.0}
+    out: dict[str, float] = {}
+    coef = 1.0
+    for _ in range(walk_len):
+        nx: dict[str, float] = {}
+        for u, xu in x.items():
+            for v, p in adj.get(u, ()):
+                nx[v] = nx.get(v, 0.0) + xu * p
+        x = nx
+        coef *= alpha
+        for v, xv in x.items():
+            if xv > 0:
+                out[v] = out.get(v, 0.0) + coef * xv
+    return out
+
+
 def identify_and_prune_edges(
     edges: list[tuple[str, str]],
     labeled_pairs: list[tuple[str, str, bool]],
@@ -245,14 +347,15 @@ def identify_and_prune_edges(
     `(cleaned_edges, blocked_edges, reserved_pairs)`.
 
     `use_propagation=True` swaps in `identify_suspect_edges_propagated`
-    instead of the plain rule -- opt-in, not the default, since its
-    measured benefit is specific to hub-heavy graphs (see that function's
-    docstring): essentially no effect on locally-random noise, but blocks
-    substantially more real hallucinated edges on dense, hub-node-heavy
-    data (e.g. an LLM's own multi-hop shortcuts converging on popular
-    concepts) at the same reliability and a slightly better mean FPR.
-    Recommended when your deployment's graph has that shape; the plain
-    default is the safer choice when it doesn't or you're unsure.
+    instead of the plain rule -- opt-in, not the default. Its magnet
+    mechanism only ever fires for a target that already has an edge
+    independently corroborated `min_evidence` (default 2) times; if your
+    `labeled_pairs` never repeats the same query (each candidate edge
+    backed by exactly one encounter -- the common case for an LLM's
+    per-query shortcut claims), this is a no-op, same as plain
+    `min_evidence=2` alone (see the module docstring's real-data
+    discussion). Where it DOES have repeated corroboration to work with,
+    it does not regress the synthetic benchmark.
 
     `reserved_pairs` is disjoint from whatever was used to decide removal,
     so it's safe to use to independently evaluate the cleaned graph (the

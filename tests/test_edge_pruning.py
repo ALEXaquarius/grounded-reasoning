@@ -8,6 +8,7 @@ from grounded_reasoning.reasoning.edge_pruning import (
     identify_and_prune_edges,
     identify_suspect_edges,
     identify_suspect_edges_propagated,
+    masked_infer,
     prune_edges,
 )
 from grounded_reasoning.experiments.edge_pruning_eval import (
@@ -243,3 +244,50 @@ def test_propagation_does_not_regress_synthetic_benchmark_fpr():
         mean_prop = sum(prop_fprs) / len(prop_fprs)
         # propagation must not be MEANINGFULLY worse on this regime
         assert mean_prop < mean_plain + 0.10, f"{label}: plain={mean_plain:.1%} prop={mean_prop:.1%}"
+
+
+def test_masked_infer_matches_plain_infer_when_nothing_is_blocked():
+    # blocked={} means no edges are removed -- masked_infer must degenerate
+    # to exactly the same diffusion as a fresh FuzzyInferenceEngine
+    edges = [("a", "b"), ("b", "c"), ("a", "d")]
+    eng = FuzzyInferenceEngine(walk_len=6, alpha=0.6)
+    for u, v in edges:
+        eng.add_relation(u, v)
+    plain = eng.infer("a")
+    masked = masked_infer(edges, set(), "a", walk_len=6, alpha=0.6)
+    for k in plain:
+        assert abs(plain[k] - masked[k]) < 1e-9
+
+
+def test_masked_infer_only_removes_mass_never_redistributes_it():
+    # source "a" has two outgoing edges (to b and to x); blocking a->x
+    # should DROP its confidence mass, not inflate a->b's, unlike plain
+    # post-prune scoring on prune_edges(edges, blocked) which WOULD
+    # concentrate a's remaining transition probability onto a->b alone
+    edges = [("a", "b"), ("a", "x")]
+    blocked = {("a", "x")}
+
+    masked = masked_infer(edges, blocked, "a", walk_len=4, alpha=0.6)
+    # a->b's masked score matches its ORIGINAL (pre-block) share, since
+    # normalization uses the ORIGINAL out-degree (2), not the pruned one (1)
+    unblocked_eng = FuzzyInferenceEngine(walk_len=4, alpha=0.6)
+    for u, v in edges:
+        unblocked_eng.add_relation(u, v)
+    original_b_score = unblocked_eng.infer("a")["b"]
+    assert abs(masked["b"] - original_b_score) < 1e-9
+    assert "x" not in masked
+
+    pruned_eng = FuzzyInferenceEngine(walk_len=4, alpha=0.6)
+    pruned_eng.add_relation("a", "b")  # a->x already removed
+    concentrated_b_score = pruned_eng.infer("a")["b"]
+    # plain post-prune scoring DOES concentrate -- b's score doubles once
+    # a's only other edge is gone (degree 2 -> 1) -- masked_infer must NOT
+    assert concentrated_b_score > masked["b"] + 1e-9
+
+
+def test_masked_infer_blocked_set_is_independent_of_any_identify_function():
+    # masked_infer takes a raw blocked set -- it works with ANY subset,
+    # not just output from identify_suspect_edges/_propagated
+    edges = [("a", "b"), ("b", "c")]
+    out = masked_infer(edges, {("a", "b")}, "a", walk_len=4, alpha=0.6)
+    assert out == {}

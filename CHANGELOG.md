@@ -8,7 +8,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
-- **`identify_suspect_edges` / `prune_edges` / `identify_and_prune_edges`**
+- **`identify_suspect_edges` / `prune_edges` / `identify_and_prune_edges` /
+  `identify_suspect_edges_propagated` / `masked_infer`**
   (`grounded_reasoning/reasoning/edge_pruning.py`) — held-out-evidence edge
   pruning: identifies and removes specific spurious edges from a noisy
   relation graph using held-out labeled evidence, instead of only
@@ -19,14 +20,26 @@ All notable changes to this project are documented here. The format is based on
   dropout-dominant noise), while the wrongly-removed rate at the
   recommended configuration (`identify_frac=0.85, min_evidence=2`, the
   default of `identify_and_prune_edges`) stays at 1.5–4.2% (95% upper
-  bound 2.6–8.9%) — down from 13–32% at the naive default split. Checked
-  against real DeepSeek hallucinations, not just simulated noise: the
-  blocking decision stays accurate, though the downstream FPR benefit is
-  less reliable (~73% of evaluation splits) on a densely-hallucinated,
-  hub-node-heavy real scenario than on the synthetic benchmark — a scope
-  limit that is disclosed, not hidden. See `edge_pruning_eval.py`,
-  `edge_pruning_llm_eval.py`, `tests/test_edge_pruning.py`, and PAPER.md
-  §7.1's remark.
+  bound 2.6–8.9%) — down from 13–32% at the naive default split.
+  Checked against real DeepSeek hallucinations, not just simulated noise
+  (n_seeds=6, 6 batches, 5126 labeled pairs / 5763 unique edges, 71%
+  hallucinated, correctly namespaced so pooled query batches never
+  collide — an earlier pass had a node-tagging bug that silently merged
+  distinct query DAGs and spuriously inflated per-edge evidence counts,
+  now fixed): on data where each candidate edge is backed by exactly one
+  labeled encounter (no repeated queries — the realistic single-verification
+  case), the count-based rules (`min_evidence≥2`, and
+  `identify_suspect_edges_propagated`'s hub-magnet refinement) never fire
+  at all, and lowering to `min_evidence=1` alone makes downstream FPR
+  *worse* than no pruning (63.0% → 70.7%, traced to the diffusion engine's
+  row-normalization concentrating probability onto a source's surviving
+  edges once its others are pruned). `masked_infer` — scoring that
+  normalizes by each source's pre-prune degree instead, so removal only
+  ever removes confidence mass rather than redistributing it — recovers a
+  real improvement on that same data (63.0% → 54.0%, beats raw in 12/15
+  splits), with no regression on the synthetic benchmark. See
+  `edge_pruning_eval.py`, `edge_pruning_llm_eval.py`,
+  `tests/test_edge_pruning.py`, and PAPER.md §7.1's remark.
 
 ## 0.1.7 — Heterogeneous paths, deeper fuzzing, SGDC calibration, and two conformal extensions
 

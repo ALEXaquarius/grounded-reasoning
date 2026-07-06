@@ -244,20 +244,26 @@ nhầm** — đánh đổi thật, đã đo được: với cấu hình mặc đ
 nhất), giảm còn **1.5%–3.1%** (cận trên tin cậy 95% là 2.6%–6.6%), đổi lại
 FPR sau làm sạch tăng nhẹ (VD ~49% → ~59% ở mức dropout-dominant, vẫn thấp
 hơn nhiều so với 77% ban đầu) và tập đánh giá giữ riêng nhỏ hơn. Đã kiểm
-chứng với LLM thật (DeepSeek), không chỉ mô phỏng: quyết định chặn cạnh
-vẫn chính xác trên ảo giác thật, nhưng lợi ích FPR chỉ giữ được ở ~73% số
-lần chia dữ liệu đánh giá trong một kịch bản ảo giác dày đặc qua hub-node
-— đáng tin ở đúng chế độ nhiễu đã đo (nhiễu cục bộ ngẫu nhiên 1-hop),
-không đảm bảo tổng quát hóa ra ngoài đó. Một cải tiến tất định (không
-dùng ML) riêng cho kịch bản hub dày đặc này —
-`identify_and_prune_edges(..., use_propagation=True)` — chặn được nhiều
-hơn ~2.6 lần số cạnh ảo giác thật ở đó với cùng độ tin cậy và FPR trung
-bình nhỉnh hơn, không hồi quy trên benchmark tổng hợp — tùy chọn bật
-thêm, vì lợi ích chỉ dành riêng cho đồ thị dạng hub dày đặc. Một phương
-án học máy (logistic regression) cũng đã thử và bị loại: không tổng
-quát hóa được từ dữ liệu huấn luyện tổng hợp sang dữ liệu thật. Cách này
-vẫn luôn tốn recall thật với claim đúng chỉ dựa vào đúng cạnh đó, và sửa
-đồ thị một chiều (khác calibration chỉ chỉnh ngưỡng).
+chứng với LLM thật (DeepSeek), không chỉ mô phỏng, trên dữ liệu mà mỗi
+cạnh candidate chỉ có ĐÚNG một lần được gán nhãn (không truy vấn nào lặp
+lại — trường hợp thực tế khi mỗi claim chỉ được xác minh một lần): các
+luật đếm phiếu ở trên (`min_evidence≥2`, kể cả biến thể hub-aware
+`use_propagation=True`) hoàn toàn không kích hoạt trên chế độ này, vì
+chúng cần một cạnh tự vượt ngưỡng bằng chứng hai lần độc lập — điều
+không bao giờ xảy ra khi mỗi cạnh chỉ có một bằng chứng. Hạ xuống
+`min_evidence=1` thì có chặn được cạnh ảo giác thật, nhưng tự nó lại làm
+FPR *tệ hơn* so với không làm gì cả (63.0% → 70.7%, chỉ thắng raw ở 4/15
+lần chia) — nguyên nhân là việc chuẩn hóa theo hàng của engine khuếch tán
+dồn xác suất chuyển tiếp vào các cạnh còn sót của một nguồn, một khi các
+cạnh KHÁC của nguồn đó bị xóa. Kết hợp cùng quyết định chặn đó với
+`masked_infer` (chuẩn hóa theo bậc gốc trước khi xóa của mỗi nguồn, nên
+việc xóa chỉ mất đi khối lượng tin cậy của chính nó, không dồn sang cạnh
+khác) khôi phục được cải thiện thật: 63.0% → 54.0%, thắng raw ở 12/15
+lần chia, không hồi quy trên benchmark tổng hợp. Một phương án học máy
+(logistic regression) cũng đã thử và bị loại: không tổng quát hóa được
+từ dữ liệu huấn luyện tổng hợp sang dữ liệu thật. Xóa cạnh vẫn luôn tốn
+recall thật với claim đúng chỉ dựa vào đúng cạnh đó, và sửa đồ thị một
+chiều (khác calibration chỉ chỉnh ngưỡng).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 [`edge_pruning_llm_eval.py`](grounded_reasoning/experiments/edge_pruning_llm_eval.py),
 phần remark ở PAPER.md §7.1.

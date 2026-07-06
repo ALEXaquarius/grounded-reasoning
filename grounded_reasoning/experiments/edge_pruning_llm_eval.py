@@ -13,55 +13,60 @@ ones.
 
 Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.edge_pruning_llm_eval
 
-RESULT (n_seeds=4, top_k=10, 3 DeepSeek-call batches pooled into one
-dataset of 1960 labeled pairs / 1242 edges, 69% hallucinated;
-`collect_shortcut_claims` namespaces each seed's nodes to keep pooled
-batches from colliding, since `build_dense_dag` draws from a fixed word
-list regardless of seed): `identify_and_prune_edges`'s blocking decision
-stays accurate on real hallucinations, matching the synthetic benchmark's
-precision. But across 15 independent identify/eval random splits of that
-same real data (splitting is free -- no extra API calls), cleaned FPR beat
-raw FPR in only **11/15 (73%)** of splits (mean raw FPR 69.6% -> mean
-cleaned FPR 63.5%) -- a real average improvement, but with genuine
-per-split variance, unlike the near-universal win measured in every
-synthetic regime in edge_pruning_eval.py.
+CORRECTION (see CHANGELOG/git history for the earlier, retracted numbers):
+an earlier pass pooled multiple `collect_shortcut_claims` calls (different
+`seed_offset`s) into one dataset, but tagged nodes by the LOOP-LOCAL seed
+index rather than the global one -- so two different calls reused the
+SAME "s0_", "s1_", ... prefixes, silently merging two structurally
+different per-seed DAGs under one node identity. This spuriously inflated
+per-edge evidence counts with cross-query overlap that doesn't exist in
+reality (fixed in `collect_shortcut_claims` -- tags now use
+`seed_offset + seed`). All real-data numbers below are from the
+corrected, properly-namespaced dataset (n_seeds=6, top_k=10, 6 batches at
+seed_offset 1000/1100/1200/1300/1500/1700 pooled into 5126 labeled pairs
+/ 5763 unique edges, 71% hallucinated).
 
-Traced partly to `FuzzyInferenceEngine`'s row-normalized diffusion
-(`P = D^-1 W`): a handful of hub nodes here carry many hallucinated
-shortcut edges, and removing some of a node's edges can concentrate
-transition probability onto whichever false edges remain -- unlike the
-synthetic benchmark's sparse, locally-random noise, where this effect has
-little room to act. `masked_infer` below is a mass-conserving alternative
-that was tried against this same effect and did not resolve the
-inconsistency (same 11/15 hit rate, on a mostly different subset of
-splits) -- kept here as a tested, not-adopted alternative.
+RESULT: on correctly-namespaced data, each candidate edge is backed by
+EXACTLY one labeled encounter (no query is ever repeated across 36
+disjoint per-seed DAGs), which changes the picture materially from both
+the synthetic benchmark and the earlier (buggy) real-data pass:
 
-CONCLUSION: this mitigation's benefit is specific to the topology it was
-measured on (locally-random 1-hop noise at moderate density). It still
-helps more often than not on this densely-hallucinated, hub-heavy real
-scenario, but not as reliably as on the synthetic benchmark, and should
-not be assumed to generalize without separate validation on data
-resembling the deployment's actual topology.
+1. `identify_and_prune_edges`'s default rule (`min_evidence=2`) and
+   `use_propagation=True` both require some edge to independently clear
+   `min_evidence` before they do anything -- with every candidate stuck
+   at exactly 1 vote, this NEVER happens: 0 edges blocked, a pure no-op.
+2. Lowering to `min_evidence=1` (`identify_suspect_edges` directly) does
+   block real hallucinated edges, but makes downstream FPR WORSE than no
+   pruning at all across 15 identify/eval splits: beats raw in only
+   **4/15**, mean raw FPR 63.0% -> mean cleaned FPR 70.7%.
+3. Traced to `FuzzyInferenceEngine`'s row-normalized diffusion
+   (`P = D^-1 W`): many distinct source nodes here each make several
+   direct shortcut claims, mostly false. A reserved (never-blocked)
+   claim's score is proportional to `1/out-degree(source)`; blocking that
+   SAME source's OTHER claims shrinks its degree and concentrates
+   transition mass onto whatever's left -- inflating the score of any
+   still-present false claim. Worse the more aggressively a source's
+   edges are pruned, which plain `min_evidence=1` does heavily here (70%+
+   of most sources' claims are false and get removed).
+4. `masked_infer` (now `edge_pruning.masked_infer` -- promoted from an
+   experiment here to a validated technique) sidesteps this by
+   normalizing by each source's ORIGINAL (pre-prune) out-degree, so
+   removing an edge only ever removes ITS mass, never redistributes onto
+   survivors. Paired with the SAME `min_evidence=1` blocked set, it
+   recovers a real improvement: beats raw in **12/15** splits, mean FPR
+   63.0% -> 54.0% (see `run_multi_split` below).
 
-A deterministic (no ML, no fitted parameters) refinement,
-`identify_suspect_edges_propagated` in `edge_pruning.py`, targets this
-hub-heavy case directly: once one incoming edge to a target is confirmed
-bad, treat that target as a "hallucination magnet" and lower the evidence
-bar for its OTHER candidate incoming edges too. `run_propagation_comparison`
-below is the analysis behind its docstring's claim: on this same real
-data, it blocks ~2.6x more edges than plain pruning (9847 vs 3788 across
-15 splits) while keeping the pooled wrongly-blocked rate low (3.4% vs
-1.0%) and the SAME 11/15 split-reliability against raw, with a slightly
-better mean FPR (62.0% vs 63.5%). A supervised (logistic regression)
-classifier over these same features was ALSO tried, cross-validated for
-stability across 5 independent training runs (consistent results), but
-failed to generalize from synthetic training data to this real data at
-all -- it blocked 0 edges outright until its per-feature normalization was
-manually adapted to the real data's scale, and even then performed WORSE
-than both raw and plain pruning (mean FPR 78.2%). Not adopted, and not
-reflected in edge_pruning.py, since a fitted model that fails this badly
-under distribution shift is a real generalization risk, not a validated
-alternative -- kept here only as a cautionary result.
+CONCLUSION: on a graph built from many distinct sources each making
+several direct shortcut claims (this scenario, and plausibly any
+single-query, non-repeated-evidence real deployment), the shipped
+COUNT-based blocking rules (`min_evidence>=2`, `identify_suspect_edges_
+propagated`) are inert or actively harmful -- the validated combination
+here is plain `min_evidence=1` identification PAIRED WITH `masked_infer`
+scoring, not the default `identify_and_prune_edges` configuration. Do not
+assume the synthetic benchmark's `identify_frac=0.85, min_evidence=2`
+recommendation transfers to a deployment where each specific claim is
+verified at most once; check whether your evidence has repeated,
+independent corroboration per edge before relying on it.
 """
 from __future__ import annotations
 
@@ -70,7 +75,7 @@ import random
 from grounded_reasoning.experiments.nl_ontology_eval import build_dense_dag, parse
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 from grounded_reasoning.reasoning.conformal_reasoning import conformal_threshold
-from grounded_reasoning.reasoning.edge_pruning import identify_and_prune_edges
+from grounded_reasoning.reasoning.edge_pruning import identify_and_prune_edges, masked_infer
 
 
 def collect_shortcut_claims(n_seeds: int, top_k: int, model: str, alpha: float = 0.1, seed_offset: int = 100):
@@ -124,46 +129,6 @@ def collect_shortcut_claims(n_seeds: int, top_k: int, model: str, alpha: float =
                 labeled_pairs.append((x_tagged, z, z in truth))
 
     return base_edges, shortcut_edges, labeled_pairs, gold_edges, client
-
-
-def masked_infer(edges, blocked, source, walk_len: int = 8, alpha: float = 0.6):
-    """
-    A candidate fix for the row-normalization side effect described in the
-    module docstring, TRIED and found NOT to resolve the inconsistency
-    (same ~73% hit rate as topological pruning, on a mostly-different set
-    of splits) -- kept here, not in edge_pruning.py, because it is not
-    adopted: shipping it would suggest it's a validated improvement.
-
-    Mirrors FuzzyInferenceEngine's diffusion exactly, except transition
-    probabilities are normalized by each node's ORIGINAL out-degree
-    (computed from the FULL `edges`, including blocked ones) rather than
-    the degree of the pruned graph -- so removing a blocked edge only ever
-    REMOVES its confidence mass, never redistributes it onto surviving
-    edges from the same node.
-    """
-    raw: dict[str, dict[str, float]] = {}
-    for a, b in edges:
-        raw.setdefault(a, {})
-        raw[a][b] = raw[a].get(b, 0.0) + 1.0
-    adj: dict[str, list[tuple[str, float]]] = {}
-    for u, nbrs in raw.items():
-        deg = sum(nbrs.values()) or 1.0  # ORIGINAL degree -- includes blocked edges
-        adj[u] = [(v, w / deg) for v, w in nbrs.items() if (u, v) not in blocked]
-
-    x = {source: 1.0}
-    out: dict[str, float] = {}
-    coef = 1.0
-    for _ in range(walk_len):
-        nx: dict[str, float] = {}
-        for u, xu in x.items():
-            for v, p in adj.get(u, ()):
-                nx[v] = nx.get(v, 0.0) + xu * p
-        x = nx
-        coef *= alpha
-        for v, xv in x.items():
-            if xv > 0:
-                out[v] = out.get(v, 0.0) + coef * xv
-    return out
 
 
 def score_graph(edges, eval_pairs, walk_len: int, alpha_diffusion: float, alpha_conformal: float, seed: int = 0):
@@ -234,14 +199,23 @@ def run(n_seeds: int = 4, top_k: int = 10, model: str = "deepseek-chat",
 
 def run_multi_split(n_seeds: int = 4, top_k: int = 10, model: str = "deepseek-chat",
                      alpha: float = 0.1, walk_len: int = 8, diffusion_alpha: float = 0.6,
-                     seed_offset: int = 100, n_splits: int = 15, verbose: bool = True) -> dict:
+                     seed_offset: int = 100, n_splits: int = 15, min_evidence: int = 1,
+                     verbose: bool = True) -> dict:
     """
     The analysis behind this module's documented RESULT: fetches real
     LLM-hallucinated shortcut claims ONCE, then evaluates `n_splits`
     different random identify/eval splits of that SAME data (free -- no
     extra API calls) for both topological pruning (identify_and_prune_edges
-    + a fresh engine on the cleaned edge list) and `masked_infer`, comparing
-    each against the raw (unpruned) graph on every split.
+    + a fresh engine on the cleaned edge list) and `masked_infer` scoring
+    on that SAME blocked set, comparing each against the raw (unpruned)
+    graph on every split.
+
+    `min_evidence=1` (not `identify_and_prune_edges`'s own default of 2):
+    on data where each candidate edge is backed by exactly one labeled
+    encounter (the realistic case for non-repeated queries -- see the
+    module docstring), `min_evidence>=2` blocks nothing at all, making
+    both comparisons vacuous. Pass a higher value only if your data has
+    genuine repeated corroboration per edge.
     """
     base_edges, shortcut_edges, labeled_pairs, gold_edges, client = collect_shortcut_claims(
         n_seeds, top_k, model, alpha, seed_offset
@@ -252,7 +226,8 @@ def run_multi_split(n_seeds: int = 4, top_k: int = 10, model: str = "deepseek-ch
     raw_fprs, topo_fprs, masked_fprs = [], [], []
     for split_seed in range(n_splits):
         cleaned_edges, blocked, reserved_pairs = identify_and_prune_edges(
-            full_edges, labeled_pairs, walk_len=walk_len, alpha=diffusion_alpha, seed=split_seed
+            full_edges, labeled_pairs, walk_len=walk_len, alpha=diffusion_alpha, seed=split_seed,
+            min_evidence=min_evidence,
         )
         r_raw = score_graph(full_edges, reserved_pairs, walk_len, diffusion_alpha, alpha, split_seed)
         r_topo = score_graph(cleaned_edges, reserved_pairs, walk_len, diffusion_alpha, alpha, split_seed)
@@ -291,14 +266,21 @@ def run_propagation_comparison(n_seeds: int = 4, top_k: int = 10, model: str = "
                                 alpha: float = 0.1, walk_len: int = 8, diffusion_alpha: float = 0.6,
                                 seed_offset: int = 100, n_splits: int = 15, verbose: bool = True) -> dict:
     """
-    The analysis behind `identify_suspect_edges_propagated`'s docstring
-    claim: fetches real LLM-hallucinated shortcut claims ONCE, then
-    compares plain topological pruning (`use_propagation=False`) against
+    Compares plain topological pruning (`use_propagation=False`) against
     the propagated variant (`use_propagation=True`) across `n_splits`
-    random identify/eval splits of that SAME data (free -- no extra API
-    calls), on both downstream FPR and the wrongly-blocked rate (pooled
-    across splits, since this data's hub-heavy topology is exactly where
-    propagation is expected to matter).
+    random identify/eval splits of the same real LLM-hallucinated data
+    (free -- no extra API calls), on both downstream FPR and the
+    wrongly-blocked rate.
+
+    On correctly-namespaced data where each candidate edge is backed by
+    only one labeled encounter (see the module docstring), BOTH variants
+    are a no-op here: `identify_suspect_edges_propagated`'s magnet
+    mechanism, like the plain rule's default `min_evidence=2`, requires
+    some edge to independently clear that bar first, which never happens
+    when no edge ever gets a second vote. This function remains useful
+    for graphs that DO have genuine repeated corroboration per edge; it
+    is not where this module's validated real-data improvement comes
+    from (see `run_multi_split` / `masked_infer` instead).
     """
     base_edges, shortcut_edges, labeled_pairs, gold_edges, client = collect_shortcut_claims(
         n_seeds, top_k, model, alpha, seed_offset

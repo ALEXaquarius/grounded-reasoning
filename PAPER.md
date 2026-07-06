@@ -848,52 +848,69 @@ pruning is not reversible the way recalibrating a threshold is.
 **Scope check against a REAL LLM (DeepSeek), not just simulated noise** —
 `edge_pruning_llm_eval.py`: on a densely-hallucinated multi-hop-shortcut
 scenario (an LLM's own claimed transitive conclusions treated as direct
-edges — 69% of them hallucinated, real DeepSeek output), the blocking
-decision itself stayed accurate on real hallucinations, matching the
-synthetic benchmark's precision. But across 15 independent random
-identify/eval splits of that same real data, cleaned FPR beat raw FPR in
-only **11/15 (73%)** of splits (mean raw FPR 69.6% → mean cleaned FPR
-63.5%) — a real average improvement, but with genuine per-split variance,
-unlike the near-universal win measured in every synthetic regime. Traced
-partly to `FuzzyInferenceEngine`'s row-normalized diffusion (`P = D^-1 W`):
-a few hub nodes carrying many hallucinated shortcuts behave differently
-under pruning than the synthetic benchmark's sparse, locally-random noise,
-since removing some of a node's edges can concentrate transition
-probability onto whichever false edges remain. **This mitigation's benefit
-should therefore not be assumed to generalize beyond the regime it was
-measured in** (locally-random 1-hop noise at moderate density); a dense,
-hub-heavy hallucination pattern still helps more often than not, but needs
-its own validation before relying on it.
+edges — 71% of them hallucinated, real DeepSeek output, 5126 labeled
+pairs / 5763 unique edges across 36 independently-seeded queries). An
+earlier pass of this validation pooled multiple query batches with a
+node-tagging bug that reused the same per-batch tag prefixes across
+calls, silently merging distinct query DAGs and spuriously inflating
+per-edge evidence counts (fixed — see CHANGELOG/git history); the
+corrected numbers below replace that earlier (retracted) measurement.
 
-**A deterministic refinement targeting this hub-heavy case directly** —
-`identify_suspect_edges_propagated` (no fitted parameters, no ML): once
-one incoming edge to a target is confirmed bad, its target is treated as
-a "hallucination magnet" and the evidence bar for its OTHER candidate
-incoming edges is lowered too, since a bad edge already landing there is
-corroborating evidence the target attracts hallucinations. On the same
-real data, it blocks ~2.6× more edges than plain pruning (9847 vs. 3788
-across 15 splits) while keeping the pooled wrongly-blocked rate low (3.4%
-vs. 1.0%) and the SAME 11/15 split-reliability, with a slightly better
-mean FPR (62.0% vs. 63.5%) — a real, targeted improvement, not a full fix
-(the underlying 73% reliability is unchanged). On the synthetic benchmark
-it is statistically indistinguishable from plain pruning (no regression):
-sparse, locally-random noise rarely puts multiple suspect edges on one
-target, so the propagation step rarely fires. Available as
-`identify_and_prune_edges(..., use_propagation=True)`, opt-in rather than
-default since its benefit is specific to hub-heavy graphs.
+On correctly-namespaced data, every candidate edge is backed by EXACTLY
+one labeled encounter — no query is ever repeated across the 36 disjoint
+per-seed DAGs, the realistic case for a deployment that verifies each
+claim once. This changes the picture materially from the synthetic
+benchmark: (1) the default rule (`min_evidence=2`) and
+`identify_suspect_edges_propagated` both require some edge to
+independently clear that bar before doing anything, which never happens
+when no edge ever gets a second vote — both are a pure no-op on this data
+(0 edges blocked). (2) Lowering to `min_evidence=1` does block real
+hallucinated edges, but makes downstream FPR *worse* than no pruning at
+all across 15 identify/eval splits: beats raw in only **4/15**, mean raw
+FPR 63.0% → mean cleaned FPR 70.7%. Traced to `FuzzyInferenceEngine`'s
+row-normalized diffusion (`P = D^-1 W`): many distinct source nodes here
+each make several direct shortcut claims, mostly false; a reserved
+(never-blocked) claim's score is proportional to `1/out-degree(source)`,
+so blocking that SAME source's OTHER claims shrinks its degree and
+concentrates transition mass onto whatever's left — inflating the score
+of any still-present false claim, worse the more aggressively a source's
+edges are pruned (which `min_evidence=1` does heavily here, since ~70% of
+most sources' claims are false and get removed).
 
-A supervised (logistic regression) classifier over the same
-per-edge features (false-vote count, bridge status, target centrality,
-path multiplicity) was also tried — cross-validated for stability across 5
-independent training runs on synthetic data (consistent results there) —
-but failed to generalize to the real data at all: it blocked zero edges
-until its per-feature normalization was manually rescaled to the real
-data's distribution, and even then performed *worse* than both raw and
-plain pruning (mean FPR 78.2%, vs. 69.6% raw). Not adopted: a fitted model
-failing this badly under distribution shift between synthetic training
-data and real deployment data is a real risk, not a validated alternative
-— recorded because a decision this consequential should show what was
-tried and rejected, not just what shipped.
+**`masked_infer`** (`grounded_reasoning.reasoning.edge_pruning`) resolves
+this: it normalizes each source's transition probabilities by its
+ORIGINAL, pre-prune out-degree, so removing a blocked edge only ever
+removes its own confidence mass — it never redistributes onto surviving
+edges from the same source. Paired with the SAME `min_evidence=1` blocked
+set on this real data, it recovers a genuine improvement: beats raw in
+**12/15** splits, mean FPR 63.0% → 54.0% (vs. `min_evidence=1` alone
+making FPR *worse*). On the synthetic benchmark (5 regimes, 60 seeds
+each) it is statistically indistinguishable from ordinary post-prune
+scoring — no regression — since that benchmark's noise is sparse
+per-node, giving the concentration effect little room to act either way.
+
+**Verdict, revised**: on a graph built from many distinct sources each
+making several direct shortcut claims (this scenario, and plausibly any
+deployment that verifies each claim at most once), the count-based
+blocking rules above (`min_evidence≥2`, target-propagation) are inert or
+actively harmful. The validated combination for that regime is plain
+`min_evidence=1` identification **paired with `masked_infer` scoring**,
+not the `identify_and_prune_edges` default. Do not assume the synthetic
+benchmark's `identify_frac=0.85, min_evidence=2` recommendation transfers
+to a deployment with non-repeated evidence per edge; check which regime
+your deployment is in before relying on either configuration.
+
+A supervised (logistic regression) classifier over per-edge features
+(false-vote count, bridge status, target centrality, path multiplicity)
+was also tried — cross-validated for stability across 5 independent
+training runs on synthetic data (consistent there) — but failed to
+generalize to real data at all: it blocked zero edges until its
+per-feature normalization was manually rescaled to the real data's
+distribution, and even then performed *worse* than raw. Not adopted: a
+fitted model failing this badly under distribution shift between
+synthetic training data and real deployment data is a real risk, not a
+validated alternative — recorded because a decision this consequential
+should show what was tried and rejected, not just what shipped.
 
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 
