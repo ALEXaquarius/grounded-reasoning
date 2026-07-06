@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.8 — Held-out-evidence edge pruning, and a real-data correction
 
 ### Added
 
