@@ -836,30 +836,49 @@ reserved evaluation set shrinks further than at 0.8. See
 `test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate` /
 `test_wilson_upper_bound_basic_properties`.
 
-**Two further directions were tried and did NOT beat this** — reported
-because a decision this consequential should show its negative results,
-not just its positive one. (a) *Stability selection* (Meinshausen &
-Bühlmann, 2010): bootstrap-resample the identification half repeatedly and
-require an edge to be flagged as suspect in most resamples, rather than
-once. This gave essentially the same wrongly-blocked rate as
-`min_evidence` alone — unsurprising in hindsight: resampling a fixed,
-already-scarce identification half cannot manufacture true-claim evidence
-an edge never received in the first place; it only helps when the
-identification pool itself is large enough to vary meaningfully across
-resamples. (b) *A formal per-edge hypothesis test*: for each candidate edge
-with `f` false-claim encounters and zero true-claim encounters, treat
-`p0^f` (where `p0` is the overall false-label rate in the identification
-sample) as a one-sided p-value under the null "this edge behaves like an
-average edge," then apply Benjamini-Hochberg to control the expected false
-discovery rate across all candidates at a target level `q`. Despite being
-the more principled-looking construction, it was numerically **worse**
-than the simple rule at matching nominal targets (e.g. targeting `q=0.05`
-still gave a pooled wrongly-blocked rate of 7–16% across regimes) — the
-null's independence assumption fails here, because a genuinely good edge
-can be swept into disproportionately many false-claim encounters simply by
-sharing a path with a genuinely bad edge, not because it is bad itself.
-Neither direction is shipped; both are recorded so the choice of the
-simpler rule is verified, not an oversight.
+**Three directions toward a REAL statistical guarantee here (matching the
+Clopper-Pearson-style bounds used elsewhere in this project) were tried and
+did NOT work** — reported because a decision this consequential should
+show its negative results, not just its positive one. (a) *Stability
+selection* (Meinshausen & Bühlmann, 2010): bootstrap-resample the
+identification half repeatedly and require an edge to be flagged as
+suspect in most resamples, rather than once. This gave essentially the
+same wrongly-blocked rate as `min_evidence` alone — unsurprising in
+hindsight: resampling a fixed, already-scarce identification half cannot
+manufacture true-claim evidence an edge never received in the first place.
+(b) *A per-edge binomial test against a global-false-rate null*, with
+Benjamini-Hochberg FDR control across candidates: numerically **worse**
+than the simple rule at matching nominal targets (targeting `q=0.05` still
+gave a pooled wrongly-blocked rate of 7–16%) — the null assumes a genuinely
+good edge's false-vote count reflects the overall false rate, but a good
+edge sharing a path with a genuinely bad edge gets swept into
+disproportionately many false votes regardless of its own quality. (c) *A
+permutation test*, built specifically to fix (b)'s flaw: reshuffle
+true/false labels among the SAME labeled pairs, holding the graph (and
+every pair's real proof path) fixed, to estimate each candidate edge's null
+distribution from the actual path-sharing structure instead of an assumed
+global rate. This ALSO failed: at a nominal `q=0.05`, the achieved
+wrongly-blocked rate was 7.9–21.1% across regimes, and a 95%
+Clopper-Pearson **lower** bound on the heavy-spurious regime's rate alone
+(6.8%) confirms this is a real miscalibration, not sampling noise.
+
+**Diagnosis, common to all three failures**: this is not a wrong-null-shape
+bug fixable by a better resampling scheme — it is an
+attribution/identifiability problem. A held-out claim's true/false label is
+evidence about its *whole* proof path, not about any single edge on it; when
+several edges share a path with a genuinely bad edge, no scheme that only
+reshuffles *labels* (holding the graph fixed) can separate "this edge is
+bad" from "this edge sits near a bad edge," because the observed data never
+isolates one edge's individual contribution. A valid guarantee would need a
+fundamentally different framework — closer to causal attribution over a
+confounded graph than standard multiple-hypothesis testing — not attempted
+here. All three attempts are recorded so the choice of the simple,
+unguaranteed rule is a verified conclusion: this project's
+Clopper-Pearson-style guarantees are reserved for
+`calibrate_transitivity`/`ConformalReasoner`, which calibrate a single
+*threshold* (a well-behaved, low-dimensional object under exchangeability);
+edge removal is a per-edge *selection* problem with confounded evidence,
+and nothing tried so far gives it the same kind of guarantee.
 
 **Verdict: the residual risk, bounded and quantified this way, is small
 enough relative to the FPR reduction retained in every regime to keep the

@@ -57,20 +57,41 @@ e.g. ~49% to ~59% in the dropout-dominant regime, still far below the 77%
 raw baseline). See `run_mitigation_comparison` and `wilson_upper_bound` in
 `edge_pruning_eval.py`.
 
-Two other directions were tried and did NOT beat this: (a) stability
-selection (Meinshausen & Buhlmann 2010) -- bootstrap-resampling the
-identification half and requiring an edge to be flagged in most resamples
--- gave essentially the same result as `min_evidence` alone, because
-resampling a FIXED, already-scarce identification half cannot manufacture
-true-claim evidence an edge never received in the first place; (b) a
-formal per-edge hypothesis test (binomial tail probability under a
-global-false-rate null, with Benjamini-Hochberg FDR control across
-candidate edges) was numerically WORSE than the simple rule at the same
-nominal target -- the null's independence assumption does not hold here,
-since an edge can be swept into disproportionately many false-claim
-encounters simply by sharing a path with a genuinely bad edge, not because
-it is bad itself. Both are reported here so the choice of the simpler rule
-is a verified one, not an oversight.
+Three directions to give this a REAL statistical guarantee (matching the
+Clopper-Pearson-style bounds elsewhere in this project) were tried and did
+NOT work: (a) stability selection (Meinshausen & Buhlmann 2010) --
+bootstrap-resampling the identification half and requiring an edge to be
+flagged in most resamples -- gave essentially the same result as
+`min_evidence` alone, because resampling a FIXED, already-scarce
+identification half cannot manufacture true-claim evidence an edge never
+received in the first place; (b) a per-edge binomial test against a
+global-false-rate null, with Benjamini-Hochberg FDR control, was
+numerically WORSE than the simple rule at the same nominal target; (c) a
+PERMUTATION test -- reshuffling true/false labels among the SAME labeled
+pairs, holding the graph (and hence every pair's actual proof path) fixed,
+to estimate each candidate edge's null distribution directly from the
+real path-sharing structure, instead of assuming a global rate -- was tried
+specifically to fix (b)'s flaw, and ALSO failed: at a nominal target of
+q=0.05, the achieved wrongly-blocked rate was 7.9-21.1% across regimes (95%
+Clopper-Pearson LOWER bound 6.8% in the heavy-spurious regime alone --
+confirmed as a real miscalibration, not sampling noise). Diagnosis: this
+is not a wrong-null-shape bug fixable by a better resampling scheme -- it
+is an ATTRIBUTION/IDENTIFIABILITY problem. A held-out claim's true/false
+label is evidence about its WHOLE proof path, not about any one edge on
+it; when several edges share a path with a genuinely bad edge, no
+resampling scheme that only reshuffles LABELS (holding the graph fixed)
+can separate "this edge is bad" from "this edge sits near a bad edge,"
+because the observed data never isolates a single edge's individual
+contribution. Getting a valid guarantee would require a fundamentally
+different framework (closer to causal attribution over a confounded graph
+than standard multiple-hypothesis testing) -- not attempted here. All
+three attempts are reported so the choice of the simple, unguaranteed rule
+is a verified conclusion, not an oversight: this project's Clopper-Pearson
+guarantees are reserved for calibrate_transitivity/ConformalReasoner, which
+calibrate a single THRESHOLD (a well-behaved, low-dimensional object under
+exchangeability); the edge-removal DECISION here is a per-edge selection
+problem with confounded evidence, and no attempt so far has found a valid
+way to give it the same kind of guarantee.
 
 (2) It costs real recall regardless of configuration -- any true claim
 depending solely on a removed edge loses that path; (3) the graph is edited
