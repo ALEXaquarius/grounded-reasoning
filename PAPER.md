@@ -882,22 +882,37 @@ have been needed after all.
 **Scope check against a REAL LLM (DeepSeek), not just simulated noise** —
 `edge_pruning_llm_eval.py`: on a densely-hallucinated multi-hop-shortcut
 scenario (an LLM's own claimed transitive conclusions treated as direct
-edges — 65–73% of them hallucinated, real DeepSeek output across 3
-independent trials), the blocking decision itself stayed accurate (3–4%
-wrongly blocked, matching the synthetic benchmark), but the downstream
-effect on cleaned FPR was **inconsistent** — 2 of 3 trials improved, 1
-regressed (62.9%→84.3% raw→cleaned) — unlike the consistent 5-of-5-regime
-win measured synthetically. Traced to the same row-normalized-diffusion
-effect noted for reinforcement-style edge weighting elsewhere in this
-project's exploration: a few hub nodes carrying many hallucinated
-shortcuts interact with `FuzzyInferenceEngine`'s `P = D^-1 W` diffusion
-differently than the synthetic benchmark's sparse, locally-random noise —
-removing some of a node's edges can concentrate transition probability
-onto whichever false edges remain. **This mitigation's measured benefit is
-therefore scoped to locally-random 1-hop noise at moderate density; a
-dense, hub-heavy hallucination pattern needs its own validation before
-relying on it** — reported here rather than folded into a single
-reassuring average.
+edges — 69% of them hallucinated, real DeepSeek output, 1960 labeled pairs
+pooled from 3 independent API-call batches), the blocking decision itself
+stayed accurate on real hallucinations, matching the synthetic benchmark's
+precision. But across 15 independent random identify/eval splits of that
+SAME real data (free to vary — no extra API calls needed), cleaned FPR beat
+raw FPR in only **11/15 (73%)** of splits (mean raw FPR 69.6% → mean
+cleaned FPR 63.5%) — a real average improvement, but with genuine
+per-split variance, unlike the near-universal win measured in every
+synthetic regime. (An earlier version of this test pooled multiple seeds'
+node names without namespacing them — `build_dense_dag` reuses the same
+fixed word list regardless of seed — which could give one node name
+contradictory ground truth across seeds once merged; this was found and
+fixed. It changed the specific numbers, not the qualitative conclusion.)
+
+Traced (partially) to the same row-normalized-diffusion effect noted for
+reinforcement-style edge weighting elsewhere in this project's exploration:
+a few hub nodes carrying many hallucinated shortcuts interact with
+`FuzzyInferenceEngine`'s `P = D^-1 W` diffusion differently than the
+synthetic benchmark's sparse, locally-random noise — removing some of a
+node's edges can concentrate transition probability onto whichever false
+edges remain. A candidate fix, `masked_infer` (normalize by each node's
+ORIGINAL out-degree so pruning only ever removes confidence mass, never
+redistributes it), was tried and did **not** resolve the inconsistency — it
+matched topological pruning's 11/15 hit rate exactly, but on a mostly
+*different* subset of splits, showing row-normalization is a real
+contributor but not the whole explanation; the residual variance is
+unresolved. **This mitigation's measured benefit is therefore scoped to
+locally-random 1-hop noise at moderate density; a dense, hub-heavy
+hallucination pattern still helps more often than not, but needs its own
+validation before relying on it** — reported here rather than folded into
+a single reassuring average.
 
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 

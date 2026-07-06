@@ -82,20 +82,33 @@ removed edge might have been needed after all.
 SCOPE, checked against a REAL LLM (DeepSeek), not just simulated noise --
 see `edge_pruning_llm_eval.py`: on a densely-hallucinated multi-hop-shortcut
 scenario (an LLM's own claimed transitive conclusions treated as direct
-edges -- 65-73% of them hallucinated, real DeepSeek output), the BLOCKING
-decision itself stayed accurate (3-4% wrongly blocked, matching the
-synthetic benchmark), but the downstream effect on cleaned FPR was
-INCONSISTENT across 3 independent trials (2 improved, 1 got worse) --
-unlike the consistent 5/5-regime win measured synthetically. Root cause:
-that scenario's topology (a few hub nodes carrying many hallucinated
+edges -- 69% of them hallucinated, real DeepSeek output, 1960 labeled pairs
+pooled from 3 independent API-call batches), the BLOCKING decision itself
+stayed accurate on real hallucinations, matching the synthetic benchmark's
+precision. But across 15 independent random identify/eval splits of that
+SAME real data, cleaned FPR beat raw FPR in only 11/15 (73%) of splits
+(mean raw FPR 69.6% -> mean cleaned FPR 63.5%) -- a real average
+improvement, but with genuine per-split variance, unlike the near-universal
+win measured in every synthetic regime. Root cause, partially confirmed:
+this scenario's topology (a few hub nodes carrying many hallucinated
 shortcuts) interacts with FuzzyInferenceEngine's row-normalized diffusion
 differently than the synthetic benchmark's sparse, locally-random noise --
-removing some of a node's edges can concentrate transition probability
-onto whichever false edges remain. This mitigation's benefit is therefore
-NOT assumed to generalize beyond the regime it was measured in
-(locally-random 1-hop noise at moderate density); a dense,
-hub-heavy hallucination pattern needs its own validation before relying on
-it.
+removing some of a node's edges can concentrate transition probability onto
+whichever false edges remain. A candidate fix (`masked_infer` in
+`edge_pruning_llm_eval.py`, normalizing by each node's ORIGINAL out-degree
+so pruning only ever removes confidence mass instead of redistributing it)
+was tried and did NOT resolve the inconsistency -- it beat raw in the SAME
+11/15 splits overall but on a mostly different subset, meaning
+row-normalization is a real contributor but not the whole story; the
+residual variance is unresolved. This mitigation's benefit is therefore NOT
+assumed to generalize beyond the regime it was measured in (locally-random
+1-hop noise at moderate density); a dense, hub-heavy hallucination pattern
+still helps more often than not, but needs its own validation before
+relying on it, and a namespace bug in the first version of this test
+(multiple seeds sharing one fixed node-name universe, corrupting pooled
+ground truth) was found and fixed before this conclusion was reached --
+noted here since it changed the specific numbers without changing the
+qualitative finding.
 """
 from __future__ import annotations
 
