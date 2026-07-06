@@ -78,6 +78,28 @@ the real hallucination data it touched ~5x fewer edges for comparable or
 slightly better mean FPR, but did not improve the underlying 73% split
 reliability. Not adopted -- a different tradeoff point (much less graph
 editing), not a resolved improvement.
+
+A supervised classifier (logistic regression over vote counts) was also
+tried, fitted on synthetic data and cross-validated for training-run
+stability -- but it decides on an ABSOLUTE, fitted feature scale, and
+failed outright on the real data, whose evidence counts run ~100x larger
+than what it was fitted on (see `edge_pruning_llm_eval.py`'s docstring).
+A quantile threshold -- blocking a candidate once its false-vote count
+reaches a given fraction of the false-vote-count distribution FOR THAT
+GRAPH, rather than a fixed integer -- was tried as a closed-form,
+scale-invariant replacement requiring no fitting, on the same principle
+that makes this project's conformal calibration distribution-free (a rank
+within a sample, not an absolute cutoff). It transfers across that same
+~100x scale gap between synthetic and real data with no retuning at all
+(unlike the classifier), landing at the same 11/15 split-reliability as
+the count-based rule above. But on the synthetic benchmark it is
+uniformly more conservative than `min_evidence=2` (fewer edges blocked,
+worse FPR in every regime tested) rather than a strict improvement, so it
+is not adopted here -- the scale-invariance property is real and
+answers what a fitted classifier was actually buying (before it broke
+under distribution shift), but this project only ships a decision rule
+once it beats what is already shipped, not merely matches it under a
+different parameterization.
 """
 from __future__ import annotations
 
