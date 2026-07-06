@@ -751,25 +751,16 @@ answers this with a simple decision rule — **not** a statistical guarantee
 like the Clopper-Pearson bounds elsewhere in this project: from held-out
 labeled `(subject, object, is_true)` triples, an edge that appears on the
 shortest proof path of at least one FALSE-labeled claim, and on NO
-TRUE-labeled claim's path, is removed from the graph entirely.
-
-The *first* way this "suspect edge" signal was tried was as a Mondrian
-`group_fn` (reusing the exact machinery above) rather than outright removal
-— and it was numerically **falsified**: at every noise level tested, FPR got
-*worse*, not better. The reason is structural, not incidental: Mondrian must
-still guarantee coverage *within* whatever group a claim falls into, and the
-"suspect" group is disproportionately false claims routed through a bad
-edge — satisfying coverage for the few true claims that also happen to
-cross it forces that group's own threshold down, admitting more of the
-group's false claims than the global threshold did. Outright removal has no
-such constraint: the few true claims that depended on the edge lose that
-specific path (a real, disclosed recall cost), but every false claim that
-depended on it loses its only support too.
+TRUE-labeled claim's path, is removed from the graph entirely — chosen
+over a Mondrian `group_fn` (reusing the machinery above) because grouping
+must still guarantee coverage *within* the suspect group, and a group
+dominated by false claims routed through a bad edge forces that group's
+own threshold down, admitting *more* false claims than the global
+threshold did; outright removal has no such constraint.
 
 Verified (`grounded_reasoning/experiments/edge_pruning_eval.py`,
-`tests/test_edge_pruning.py`, 60 seeds/scenario across 5 noise
-regimes) — the strongest single efficiency result found in this line of
-exploration:
+`tests/test_edge_pruning.py`, 60 seeds/scenario across 5 noise regimes) —
+the strongest single efficiency result found in this line of exploration:
 
 | Noise regime | Raw FPR | Cleaned FPR | Coverage (raw / cleaned) |
 |---|---:|---:|---|
@@ -779,21 +770,19 @@ exploration:
 | Light spurious (p_drop=0.2, p_add=0.1) | 85.8% | **51.4%** | 91.8% / 92.7% |
 | Heavy spurious (p_drop=0.2, p_add=0.5) | 68.4% | **52.8%** | 90.5% / 91.1% |
 
-Unlike `redundancy_group` (which helps only under dropout-dominant noise and
-gives essentially nothing under spurious-dominant noise), removal helps
-substantially in *every* regime tested — including the one redundancy
-grouping could not touch. The two are complementary, not competing: this
-targets specific corrupted edges from labeled evidence; redundancy grouping
-targets structural heterogeneity among otherwise-legitimate claims.
+Unlike `redundancy_group` (which helps only under dropout-dominant noise
+and gives essentially nothing under spurious-dominant noise), removal
+helps substantially in *every* regime tested. The two are complementary,
+not competing: this targets specific corrupted edges from labeled
+evidence; redundancy grouping targets structural heterogeneity among
+otherwise-legitimate claims.
 
-**The tradeoffs, stated plainly and MEASURED across every regime — not just
-disclosed as a possibility, not just measured in one scenario (this is a
-decision rule, not a proof).** Unlike every calibration method elsewhere in
-this project, this one carries no probabilistic bound. (1) There is no
+**The tradeoffs.** Unlike every calibration method elsewhere in this
+project, this one carries no probabilistic bound: there is no
 false-discovery-rate guarantee, and the wrongly-removed rate is not
-negligible. Measured directly (a genuinely correct edge is one that exists
-in the true generating graph), pooling all blocked edges across 60 seeds
-per regime, with the default rule (`identify_frac=0.5`, `min_evidence=1`):
+negligible. At the default rule (`identify_frac=0.5`, `min_evidence=1`),
+pooling all blocked edges across 60 seeds per regime, the wrongly-blocked
+rate ranges 13–32% depending on noise regime:
 
 | Noise regime | Wrongly-blocked rate (pooled) |
 |---|---:|
@@ -803,18 +792,14 @@ per regime, with the default rule (`identify_frac=0.5`, `min_evidence=1`):
 | Light spurious | 32.2% |
 | Heavy spurious | 13.2% |
 
-**Mitigation, found by a Pareto sweep, measured the same way across every
-regime.** Sweeping `identify_frac` in [0.5, 0.9] and `min_evidence` in
-[1, 3] shows `identify_frac=0.85, min_evidence=2` dominates the earlier
-0.8/2 choice at every regime tested (strictly lower wrongly-blocked rate,
-small extra cleaned-FPR cost); `identify_frac=0.9` was tried and
-**rejected** — the reserved evaluation split shrinks enough that the
-conformal-calibration split inside it becomes unreliable, and cleaned FPR
-degrades sharply back toward the raw baseline. Reported as the pooled rate
-together with a one-sided 95% Wilson upper confidence bound (a large-*n*
-asymptotic approximation; `clopper_pearson_lower` elsewhere in this project
-overflows at these pooled sample sizes, in the hundreds to low thousands —
-see `wilson_upper_bound` in `edge_pruning_eval.py`):
+At the recommended configuration (`identify_frac=0.85, min_evidence=2` —
+found by a Pareto sweep over `identify_frac` in [0.5, 0.9] and
+`min_evidence` in [1, 3]; `identify_frac=0.9` was tried and rejected
+because the shrunken evaluation split makes cleaned FPR unreliable), the
+rate drops substantially, reported with a one-sided 95% Wilson upper
+confidence bound (a large-*n* approximation — `clopper_pearson_lower`
+elsewhere in this project overflows at these pooled sample sizes; see
+`wilson_upper_bound` in `edge_pruning_eval.py`):
 
 | Noise regime | Wrongly-blocked rate (pooled) | 95% upper bound |
 |---|---:|---:|
@@ -825,113 +810,60 @@ see `wilson_upper_bound` in `edge_pruning_eval.py`):
 | Heavy spurious | 2.9% | 4.2% |
 
 Light-spurious noise is both the worst case and the noisiest estimate — it
-blocks the fewest edges of any regime, so its confidence bound is widest.
-Even so, its upper bound stays under 7%, against a raw baseline of 32.2%
-(unmitigated) — a real, quantified, bounded residual risk, not eliminated,
-but precisely characterized rather than left as "could in principle
-happen." The cost: cleaned FPR rises somewhat (e.g. ~49% to ~59% in the
+blocks the fewest edges of any regime, so its confidence bound is widest;
+even so, its upper bound stays under 7%, against a raw baseline of 32.2%.
+This is a real, quantified, bounded residual risk, not eliminated. The
+cost: cleaned FPR rises somewhat (e.g. ~49% to ~59% in the
 dropout-dominant regime, still far below the 77% raw baseline), and the
-reserved evaluation set shrinks further than at 0.8. See
-`run_mitigation_comparison` in `edge_pruning_eval.py` and
+reserved evaluation set shrinks further. See `run_mitigation_comparison`
+in `edge_pruning_eval.py` and
 `test_larger_identify_split_and_min_evidence_cut_wrongly_blocked_rate` /
 `test_wilson_upper_bound_basic_properties`.
 
-**Three directions toward a REAL statistical guarantee here (matching the
-Clopper-Pearson-style bounds used elsewhere in this project) were tried and
-did NOT work** — reported because a decision this consequential should
-show its negative results, not just its positive one. (a) *Stability
-selection* (Meinshausen & Bühlmann, 2010): bootstrap-resample the
-identification half repeatedly and require an edge to be flagged as
-suspect in most resamples, rather than once. This gave essentially the
-same wrongly-blocked rate as `min_evidence` alone — unsurprising in
-hindsight: resampling a fixed, already-scarce identification half cannot
-manufacture true-claim evidence an edge never received in the first place.
-(b) *A per-edge binomial test against a global-false-rate null*, with
-Benjamini-Hochberg FDR control across candidates: numerically **worse**
-than the simple rule at matching nominal targets (targeting `q=0.05` still
-gave a pooled wrongly-blocked rate of 7–16%) — the null assumes a genuinely
-good edge's false-vote count reflects the overall false rate, but a good
-edge sharing a path with a genuinely bad edge gets swept into
-disproportionately many false votes regardless of its own quality. (c) *A
-permutation test*, built specifically to fix (b)'s flaw: reshuffle
-true/false labels among the SAME labeled pairs, holding the graph (and
-every pair's real proof path) fixed, to estimate each candidate edge's null
-distribution from the actual path-sharing structure instead of an assumed
-global rate. This ALSO failed: at a nominal `q=0.05`, the achieved
-wrongly-blocked rate was 7.9–21.1% across regimes, and a 95%
-Clopper-Pearson **lower** bound on the heavy-spurious regime's rate alone
-(6.8%) confirms this is a real miscalibration, not sampling noise.
-
-**Diagnosis, common to all three failures**: this is not a wrong-null-shape
-bug fixable by a better resampling scheme — it is an
-attribution/identifiability problem. A held-out claim's true/false label is
-evidence about its *whole* proof path, not about any single edge on it; when
-several edges share a path with a genuinely bad edge, no scheme that only
-reshuffles *labels* (holding the graph fixed) can separate "this edge is
-bad" from "this edge sits near a bad edge," because the observed data never
-isolates one edge's individual contribution. A valid guarantee would need a
-fundamentally different framework — closer to causal attribution over a
-confounded graph than standard multiple-hypothesis testing — not attempted
-here. All three attempts are recorded so the choice of the simple,
-unguaranteed rule is a verified conclusion: this project's
-Clopper-Pearson-style guarantees are reserved for
+No formal false-discovery-rate guarantee has been found for this rule, and
+none is expected to exist with standard multiple-hypothesis-testing tools:
+a held-out claim's label is evidence about its *whole* proof path, not any
+single edge on it, so when several edges share a path with a genuinely bad
+one, the observed data never isolates one edge's individual contribution
+— an attribution/identifiability obstacle, not a tunable parameter. This
+project's Clopper-Pearson-style guarantees are reserved for
 `calibrate_transitivity`/`ConformalReasoner`, which calibrate a single
 *threshold* (a well-behaved, low-dimensional object under exchangeability);
-edge removal is a per-edge *selection* problem with confounded evidence,
-and nothing tried so far gives it the same kind of guarantee.
+edge removal is a per-edge *selection* problem with confounded evidence
+instead. (Multiple constructions were tried and ruled out for the same
+reason; see git history for the specifics.)
 
 **Verdict: the residual risk, bounded and quantified this way, is small
 enough relative to the FPR reduction retained in every regime to keep the
 feature** — with `identify_frac=0.85, min_evidence=2` as the default of a
-new convenience entry point, `identify_and_prune_edges` (splits
+convenience entry point, `identify_and_prune_edges` (splits
 `labeled_pairs`, identifies, prunes, and returns the untouched reserved
 share for independent evaluation, in one call). The lower-level
 `identify_suspect_edges` keeps its original `min_evidence=1` default —
-unchanged, so existing callers of that primitive see no behavior change —
-while the new wrapper makes the measured-safest configuration the path of
-least resistance for anyone starting fresh. (2) It costs real recall
-regardless of configuration — any true claim
-depending solely on a removed edge loses that path (visible above as the
-small coverage shifts between raw and cleaned); (3) it edits the graph in
-place, a one-way structural change, unlike calibration (which only adjusts
-a threshold and leaves the graph untouched) — if the query distribution
-later differs from the held-out sample used to prune, a removed edge might
-have been needed after all.
+unchanged, so existing callers of that primitive see no behavior change.
+Recall cost and one-way graph edits apply regardless of configuration: any
+true claim depending solely on a removed edge loses that path, and
+pruning is not reversible the way recalibrating a threshold is.
 
 **Scope check against a REAL LLM (DeepSeek), not just simulated noise** —
 `edge_pruning_llm_eval.py`: on a densely-hallucinated multi-hop-shortcut
 scenario (an LLM's own claimed transitive conclusions treated as direct
-edges — 69% of them hallucinated, real DeepSeek output, 1960 labeled pairs
-pooled from 3 independent API-call batches), the blocking decision itself
-stayed accurate on real hallucinations, matching the synthetic benchmark's
-precision. But across 15 independent random identify/eval splits of that
-SAME real data (free to vary — no extra API calls needed), cleaned FPR beat
-raw FPR in only **11/15 (73%)** of splits (mean raw FPR 69.6% → mean
-cleaned FPR 63.5%) — a real average improvement, but with genuine
-per-split variance, unlike the near-universal win measured in every
-synthetic regime. (An earlier version of this test pooled multiple seeds'
-node names without namespacing them — `build_dense_dag` reuses the same
-fixed word list regardless of seed — which could give one node name
-contradictory ground truth across seeds once merged; this was found and
-fixed. It changed the specific numbers, not the qualitative conclusion.)
-
-Traced (partially) to the same row-normalized-diffusion effect noted for
-reinforcement-style edge weighting elsewhere in this project's exploration:
-a few hub nodes carrying many hallucinated shortcuts interact with
-`FuzzyInferenceEngine`'s `P = D^-1 W` diffusion differently than the
-synthetic benchmark's sparse, locally-random noise — removing some of a
-node's edges can concentrate transition probability onto whichever false
-edges remain. A candidate fix, `masked_infer` (normalize by each node's
-ORIGINAL out-degree so pruning only ever removes confidence mass, never
-redistributes it), was tried and did **not** resolve the inconsistency — it
-matched topological pruning's 11/15 hit rate exactly, but on a mostly
-*different* subset of splits, showing row-normalization is a real
-contributor but not the whole explanation; the residual variance is
-unresolved. **This mitigation's measured benefit is therefore scoped to
-locally-random 1-hop noise at moderate density; a dense, hub-heavy
-hallucination pattern still helps more often than not, but needs its own
-validation before relying on it** — reported here rather than folded into
-a single reassuring average.
+edges — 69% of them hallucinated, real DeepSeek output), the blocking
+decision itself stayed accurate on real hallucinations, matching the
+synthetic benchmark's precision. But across 15 independent random
+identify/eval splits of that same real data, cleaned FPR beat raw FPR in
+only **11/15 (73%)** of splits (mean raw FPR 69.6% → mean cleaned FPR
+63.5%) — a real average improvement, but with genuine per-split variance,
+unlike the near-universal win measured in every synthetic regime. Traced
+partly to `FuzzyInferenceEngine`'s row-normalized diffusion (`P = D^-1 W`):
+a few hub nodes carrying many hallucinated shortcuts behave differently
+under pruning than the synthetic benchmark's sparse, locally-random noise,
+since removing some of a node's edges can concentrate transition
+probability onto whichever false edges remain. **This mitigation's benefit
+should therefore not be assumed to generalize beyond the regime it was
+measured in** (locally-random 1-hop noise at moderate density); a dense,
+hub-heavy hallucination pattern still helps more often than not, but needs
+its own validation before relying on it.
 
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 

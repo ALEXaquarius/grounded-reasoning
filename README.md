@@ -233,39 +233,27 @@ simple decision rule, not a statistical guarantee. Verified across 5 noise
 regimes (60 seeds each): FPR drops substantially and consistently
 everywhere, e.g. **77.0% → 49.2%** (dropout-dominant) and **58.7% → 15.7%**
 (spurious-dominant, where `redundancy_group` gives almost nothing) —
-coverage on the remaining graph essentially unaffected. The *first* way this
-signal was tried — as a Mondrian `group_fn` instead of outright removal —
-was numerically **falsified**: it made FPR worse at every noise level,
-because Mondrian must preserve coverage even for the few true claims that
-cross a bad edge, forcing that group's threshold down. Unlike every
+coverage on the remaining graph essentially unaffected. Unlike every
 calibration method above, this one carries **no false-discovery-rate
-guarantee** — a real tradeoff, MEASURED across all 5 regimes, not just
-disclosed as a possibility or checked in one scenario: with the default
-split (`identify_frac=0.5, min_evidence=1`), the pooled wrongly-removed
-rate ranges **13.2%–32.2%** across regimes (worst: light spurious, where
-fewest edges get blocked). A Pareto sweep over the identification split and
-`min_evidence` found `identify_frac=0.85, min_evidence=2` — drops this to
-**1.5%–3.1%**, with a 95% upper confidence bound (Wilson interval) of
-**2.6%–6.6%** across regimes (`identify_frac=0.9` was tried and
-**rejected**: the evaluation split shrinks enough that cleaned FPR degrades
-sharply back toward the raw baseline). Two other directions were tried and
-did **not** beat this — stability selection (bootstrap-resampling the
-identification data) gave essentially the same rate, since resampling a
-fixed, scarce identification pool can't manufacture evidence an edge never
-received; and a formal per-edge hypothesis test with Benjamini-Hochberg FDR
-control was numerically **worse**, because its independence assumption
-fails when a good edge shares a path with a genuinely bad one. Cost of the
-shipped mitigation: cleaned FPR rises somewhat (e.g. ~49% → ~59% in the
-dropout-dominant regime, still far below the 77% raw baseline), and the
-reserved evaluation set shrinks further. **Verdict: kept, with this
-configuration as the default** — `identify_and_prune_edges` (same module)
-applies it automatically (splits `labeled_pairs`, identifies, prunes, and
-hands back the untouched reserved share for independent evaluation) so it's
-the path of least resistance, not something you have to remember to
-configure. It also costs real recall for any true claim that depended
-solely on a removed edge, and it edits the graph in place (a one-way
-change, unlike calibration which only adjusts a threshold).
+guarantee** — a real, measured tradeoff: at the default configuration
+(`identify_frac=0.5, min_evidence=1`), the pooled wrongly-removed rate
+ranges **13.2%–32.2%** across regimes. At the recommended configuration
+(`identify_frac=0.85, min_evidence=2`, found by a Pareto sweep — the
+default of `identify_and_prune_edges`, which applies it automatically so
+it's the path of least resistance), it drops to **1.5%–3.1%** (95% upper
+confidence bound 2.6%–6.6%), at the cost of cleaned FPR rising somewhat
+(e.g. ~49% → ~59% in the dropout-dominant regime, still far below the 77%
+raw baseline) and a smaller reserved evaluation set. Checked against a real
+LLM (DeepSeek), not just simulated noise: the blocking decision stays
+accurate on real hallucinations, but the downstream FPR benefit held in
+only ~73% of random evaluation splits on a densely-hallucinated,
+hub-node-heavy real scenario — reliable on the regime it was measured on
+(locally-random 1-hop noise), not guaranteed to generalize beyond it. It
+also costs real recall for any true claim that depended solely on a
+removed edge, and it edits the graph in place (a one-way change, unlike
+calibration which only adjusts a threshold).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
+[`edge_pruning_llm_eval.py`](grounded_reasoning/experiments/edge_pruning_llm_eval.py),
 PAPER.md §7.1's remark.
 
 ---

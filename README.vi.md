@@ -234,38 +234,25 @@ hiện trên bất kỳ claim ĐÚNG nào — một luật quyết định đơn
 bảo đảm thống kê. Kiểm chứng qua 5 mức nhiễu (60 seed mỗi mức): FPR giảm
 mạnh và nhất quán ở mọi nơi, VD **77.0% → 49.2%** (chủ yếu mất cạnh) và
 **58.7% → 15.7%** (chủ yếu cạnh giả — nơi `redundancy_group` gần như không
-giúp được gì) — coverage trên đồ thị còn lại gần như không đổi. Cách dùng
-tín hiệu này ĐẦU TIÊN — làm `group_fn` cho Mondrian thay vì xóa hẳn — đã bị
-**bác bỏ bằng số liệu**: làm FPR tệ hơn ở mọi mức nhiễu, vì Mondrian phải
-giữ coverage kể cả cho vài claim đúng hiếm hoi đi qua cạnh xấu, buộc ngưỡng
-của nhóm đó phải hạ xuống. Khác với mọi phương pháp calibrate ở trên,
-cách này **không có bảo đảm chống nhầm** — đánh đổi thật, đã ĐO trên CẢ 5
-mức nhiễu chứ không chỉ 1 kịch bản: với cấu hình mặc định
+giúp được gì) — coverage trên đồ thị còn lại gần như không đổi. Khác với
+mọi phương pháp calibrate ở trên, cách này **không có bảo đảm chống
+nhầm** — đánh đổi thật, đã đo được: với cấu hình mặc định
 (`identify_frac=0.5, min_evidence=1`), tỷ lệ xóa nhầm gộp dao động
-**13.2%–32.2%** tùy mức nhiễu (tệ nhất: "light spurious", nơi ít cạnh bị
-chặn nhất). Quét Pareto qua tỷ lệ chia dữ liệu và `min_evidence` tìm ra
-`identify_frac=0.85, min_evidence=2` — giảm còn **1.5%–3.1%**, với cận
-trên tin cậy 95% (khoảng Wilson) là **2.6%–6.6%** tùy mức nhiễu
-(`identify_frac=0.9` đã thử và **bị loại**: tập đánh giá co lại đủ nhỏ
-khiến FPR sau làm sạch tệ hẳn đi, gần về mức ban đầu). Hai hướng khác cũng
-đã thử nhưng **không** vượt qua được cách này — "stability selection"
-(lấy mẫu lại có hoàn lại nhiều lần trên nửa dữ liệu tìm cạnh khả nghi) cho
-kết quả gần như y hệt, vì lấy mẫu lại trên một tập dữ liệu cố định, vốn đã
-ít, không thể tạo ra bằng chứng claim đúng mà một cạnh chưa từng nhận
-được; và một kiểm định giả thuyết hình thức cho từng cạnh, dùng kiểm soát
-FDR Benjamini-Hochberg, lại cho kết quả **tệ hơn** — vì giả định độc lập
-của nó không đúng khi một cạnh tốt tình cờ dùng chung đường đi với một
-cạnh xấu thật sự. Đánh đổi của cách đã chọn: FPR sau khi làm sạch tăng nhẹ
-(VD ~49% → ~59% ở mức dropout-dominant, vẫn thấp hơn nhiều so với 77% ban
-đầu), và tập đánh giá giữ riêng nhỏ hơn nữa. **Kết luận: giữ lại tính
-năng, dùng cấu hình này làm mặc định** — `identify_and_prune_edges` (cùng
-module) tự áp dụng cấu hình này (tự chia `labeled_pairs`, tìm cạnh khả
-nghi, làm sạch, và trả lại phần dữ liệu giữ riêng chưa đụng tới để đánh
-giá độc lập), nên đây là lựa chọn mặc định dễ dùng nhất, không phải thứ
-người dùng phải nhớ tự cấu hình. Cách này vẫn luôn tốn recall thật với
-claim đúng chỉ dựa vào đúng cạnh đó, và sửa đồ thị một chiều (khác
-calibration chỉ chỉnh ngưỡng).
+**13.2%–32.2%** tùy mức nhiễu. Với cấu hình khuyến nghị
+(`identify_frac=0.85, min_evidence=2`, tìm được qua quét Pareto — mặc
+định của `identify_and_prune_edges`, tự áp dụng nên là lựa chọn dễ dùng
+nhất), giảm còn **1.5%–3.1%** (cận trên tin cậy 95% là 2.6%–6.6%), đổi lại
+FPR sau làm sạch tăng nhẹ (VD ~49% → ~59% ở mức dropout-dominant, vẫn thấp
+hơn nhiều so với 77% ban đầu) và tập đánh giá giữ riêng nhỏ hơn. Đã kiểm
+chứng với LLM thật (DeepSeek), không chỉ mô phỏng: quyết định chặn cạnh
+vẫn chính xác trên ảo giác thật, nhưng lợi ích FPR chỉ giữ được ở ~73% số
+lần chia dữ liệu đánh giá trong một kịch bản ảo giác dày đặc qua hub-node
+— đáng tin ở đúng chế độ nhiễu đã đo (nhiễu cục bộ ngẫu nhiên 1-hop),
+không đảm bảo tổng quát hóa ra ngoài đó. Cách này vẫn luôn tốn recall
+thật với claim đúng chỉ dựa vào đúng cạnh đó, và sửa đồ thị một chiều
+(khác calibration chỉ chỉnh ngưỡng).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
+[`edge_pruning_llm_eval.py`](grounded_reasoning/experiments/edge_pruning_llm_eval.py),
 phần remark ở PAPER.md §7.1.
 
 ---

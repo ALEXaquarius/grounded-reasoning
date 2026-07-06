@@ -13,66 +13,35 @@ ones.
 
 Run: DEEPSEEK_API_KEY=... python -m grounded_reasoning.experiments.edge_pruning_llm_eval
 
-CORRECTNESS NOTE on an earlier version of this result: `build_dense_dag`
-draws node names from the SAME fixed word list regardless of seed -- only
-edge structure varies by seed. An earlier version of `collect_shortcut_claims`
-pooled multiple seeds' edges/labels into one graph WITHOUT namespacing nodes
-per seed, so the same node name could carry contradictory ground truth
-across seeds (e.g. "vora relates to sigma" true in one seed's DAG, false in
-another's) once merged -- corrupting the pooled dataset. Fixed by tagging
-every node with its seed. The result below is from the CORRECTED version;
-it changed the specific numbers but not the qualitative conclusion.
+RESULT (n_seeds=4, top_k=10, 3 DeepSeek-call batches pooled into one
+dataset of 1960 labeled pairs / 1242 edges, 69% hallucinated;
+`collect_shortcut_claims` namespaces each seed's nodes to keep pooled
+batches from colliding, since `build_dense_dag` draws from a fixed word
+list regardless of seed): `identify_and_prune_edges`'s blocking decision
+stays accurate on real hallucinations, matching the synthetic benchmark's
+precision. But across 15 independent identify/eval random splits of that
+same real data (splitting is free -- no extra API calls), cleaned FPR beat
+raw FPR in only **11/15 (73%)** of splits (mean raw FPR 69.6% -> mean
+cleaned FPR 63.5%) -- a real average improvement, but with genuine
+per-split variance, unlike the near-universal win measured in every
+synthetic regime in edge_pruning_eval.py.
 
-RESULT (verified on corrected data, n_seeds=4, top_k=10, 3 independent
-DeepSeek-call batches pooled into one dataset of 1960 labeled pairs / 1242
-edges, 1348/1960 = 69% hallucinated): identify_and_prune_edges's BLOCKING
-DECISION stays accurate on real hallucinations. But across 15 independent
-identify/eval RANDOM SPLITS of that same real data (no extra API calls --
-splitting is free), cleaned FPR beat raw FPR in only **11/15 (73%)** of
-splits (mean raw FPR 69.6% -> mean cleaned FPR 63.5%) -- a real average
-improvement, but with genuine per-split variance, unlike the near-universal
-win measured in every synthetic regime in edge_pruning_eval.py. The 4
-splits where cleaning did NOT help were exactly the splits where the raw
-graph's FPR on that particular reserved-eval slice happened to already be
-low (30-45%, vs. a typical 60-90%) -- less headroom, more downside risk
-from the pruning decision's own noise.
+Traced partly to `FuzzyInferenceEngine`'s row-normalized diffusion
+(`P = D^-1 W`): a handful of hub nodes here carry many hallucinated
+shortcut edges, and removing some of a node's edges can concentrate
+transition probability onto whichever false edges remain -- unlike the
+synthetic benchmark's sparse, locally-random noise, where this effect has
+little room to act. `masked_infer` below is a mass-conserving alternative
+that was tried against this same effect and did not resolve the
+inconsistency (same 11/15 hit rate, on a mostly different subset of
+splits) -- kept here as a tested, not-adopted alternative.
 
-Root cause (confirmed by inspecting score distributions on a smaller
-repro): this scenario's topology is qualitatively different from the
-synthetic benchmark's sparse, locally-random noise -- a handful of hub
-nodes here carry many hallucinated shortcut edges. FuzzyInferenceEngine's
-diffusion is row-normalized (P = D^-1 W); removing some of a node's
-outgoing edges concentrates transition probability onto whichever edges
-REMAIN, including any still-false ones that weren't blocked (blocking is
-strict: skipped if it ever saw a true-claim vote or too few false-claim
-votes). That redistribution can raise remaining false scores enough to
-outweigh the direct benefit of removing the edges that WERE blocked. The
-same row-normalization side effect was independently observed earlier in
-this project's exploration of reinforcement-style edge weighting.
-
-A candidate fix was tried and did NOT resolve it: `masked_infer` (mass-
-conserving inference -- normalize by each node's ORIGINAL out-degree,
-including blocked edges, so pruning only ever REMOVES confidence mass
-instead of ever redistributing it onto surviving edges) was tested
-against the same 15 splits. On the synthetic benchmark it reproduces
-topological pruning's numbers almost exactly (as expected -- low-out-degree
-nodes there give the redistribution effect little room to act). On this
-real, hub-heavy hallucination data it ALSO beat raw in 11/15 splits --
-identical hit rate to plain topological pruning, on a mostly-different set
-of splits. So the row-normalization mechanism is A real contributor, but
-not THE whole explanation -- something about this topology's variance
-across splits is more fundamental than that one side effect, and remains
-unresolved. Not shipped; recorded as a tried-and-inconclusive direction.
-
-CONCLUSION: identify_and_prune_edges's benefit, as measured across every
-regime in edge_pruning_eval.py, is specific to that regime's topology
-(locally-random 1-hop noise at moderate density). It still helps MORE
-OFTEN THAN NOT on this densely-hallucinated, hub-heavy real scenario
-(11/15 splits, mean FPR improves), but not with the same reliability as the
-synthetic benchmark, and should not be assumed to generalize without
-separate validation on data resembling the deployment's actual topology.
-This is recorded as a real, measured limitation, not swept under a "still
-helps on average" claim.
+CONCLUSION: this mitigation's benefit is specific to the topology it was
+measured on (locally-random 1-hop noise at moderate density). It still
+helps more often than not on this densely-hallucinated, hub-heavy real
+scenario, but not as reliably as on the synthetic benchmark, and should
+not be assumed to generalize without separate validation on data
+resembling the deployment's actual topology.
 """
 from __future__ import annotations
 

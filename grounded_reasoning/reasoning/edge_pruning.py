@@ -21,115 +21,53 @@ identified edge from the graph avoids this entirely: the few true claims
 that depended on it lose that specific path (a real, disclosed recall cost),
 but every false claim that depended on it loses its only support too.
 
-This is a simple decision rule (by default, any single disqualifying
-encounter removes an edge, unless offset by at least one true-claim
-encounter on the SAME edge), NOT a statistical guarantee like the
-Clopper-Pearson bounds elsewhere in this project -- there is no claimed
-false-discovery-rate control here. It is verified empirically instead: over
-30-80 seeds across 6 noise regimes (dropout-dominant, spurious-dominant, and
-mixes), false-positive rate dropped substantially and consistently (e.g.
-76.8% -> 50.0% at p_drop=0.2/p_add=0.3, winning in 69/80 trials; 58.9% ->
-16.2% at p_drop=0.0/p_add=0.3), with coverage on the REMAINING graph
-essentially unaffected -- see `grounded_reasoning/experiments/edge_pruning_eval.py`.
+This is a simple decision rule, NOT a statistical guarantee like the
+Clopper-Pearson bounds elsewhere in this project: there is no
+false-discovery-rate control. This project's Clopper-Pearson guarantees
+apply to calibrating a single THRESHOLD (`calibrate_transitivity`,
+`ConformalReasoner`) -- a well-behaved, low-dimensional object under
+exchangeability. Edge removal is a per-edge SELECTION problem instead: a
+held-out claim's true/false label is evidence about its whole proof path,
+not any one edge on it, so when several edges share a path with a
+genuinely bad one, no resampling or hypothesis-testing scheme tried gives
+a valid bound on the wrongly-removed rate (an attribution/identifiability
+obstacle, not a tunable parameter -- see CHANGELOG/git history for the
+specific constructions ruled out). This rule is verified empirically
+instead.
 
-Real tradeoffs, MEASURED across every noise regime tested (not just
-disclosed as a possibility, not just checked in one scenario): (1) no
-false-discovery-rate bound, and the empirical wrongly-removed rate is not
-negligible -- with a 50/50 held-out split (half used to identify suspect
-edges, half reserved for the final evaluation) and the default rule, the
-POOLED wrongly-removed rate ranges 13-32% depending on noise regime (worst:
-light-spurious noise, where fewest edges get blocked at all).
+Measured properties (`edge_pruning_eval.py`, 5 noise regimes, 60+ seeds
+each): false-positive rate drops substantially and consistently (e.g.
+77% -> 49% under dropout-dominant noise, 59% -> 16% under
+spurious-dominant noise), with coverage on the remaining graph essentially
+unaffected.
 
-A Pareto sweep over `identify_frac` (the share of held-out data used for
-identification, tested 0.5-0.9) and `min_evidence` (tested 1-3) found
-`identify_frac=0.85, min_evidence=2` dominates every point at or below
-`identify_frac=0.8`: a lower wrongly-blocked rate at a small extra cost in
-cleaned FPR, in every regime. Beyond 0.85, `identify_frac=0.9` was tried and
-REJECTED -- the reserved evaluation split shrinks enough that the
-conformal-calibration split inside it becomes unreliable and cleaned FPR
-degrades sharply back toward the raw baseline. At `identify_frac=0.85,
-min_evidence=2`, the pooled wrongly-removed rate drops to 1.3-4.2%, with a
-one-sided 95% Wilson upper confidence bound of 2.7-8.9% (worst case still
-light-spurious noise, and also the noisiest estimate -- fewest edges
-blocked means the widest interval) -- at the cost of a smaller reserved
-evaluation set and somewhat less aggressive cleaning (cleaned FPR rises,
-e.g. ~49% to ~59% in the dropout-dominant regime, still far below the 77%
-raw baseline). See `run_mitigation_comparison` and `wilson_upper_bound` in
-`edge_pruning_eval.py`.
-
-Three directions to give this a REAL statistical guarantee (matching the
-Clopper-Pearson-style bounds elsewhere in this project) were tried and did
-NOT work: (a) stability selection (Meinshausen & Buhlmann 2010) --
-bootstrap-resampling the identification half and requiring an edge to be
-flagged in most resamples -- gave essentially the same result as
-`min_evidence` alone, because resampling a FIXED, already-scarce
-identification half cannot manufacture true-claim evidence an edge never
-received in the first place; (b) a per-edge binomial test against a
-global-false-rate null, with Benjamini-Hochberg FDR control, was
-numerically WORSE than the simple rule at the same nominal target; (c) a
-PERMUTATION test -- reshuffling true/false labels among the SAME labeled
-pairs, holding the graph (and hence every pair's actual proof path) fixed,
-to estimate each candidate edge's null distribution directly from the
-real path-sharing structure, instead of assuming a global rate -- was tried
-specifically to fix (b)'s flaw, and ALSO failed: at a nominal target of
-q=0.05, the achieved wrongly-blocked rate was 7.9-21.1% across regimes (95%
-Clopper-Pearson LOWER bound 6.8% in the heavy-spurious regime alone --
-confirmed as a real miscalibration, not sampling noise). Diagnosis: this
-is not a wrong-null-shape bug fixable by a better resampling scheme -- it
-is an ATTRIBUTION/IDENTIFIABILITY problem. A held-out claim's true/false
-label is evidence about its WHOLE proof path, not about any one edge on
-it; when several edges share a path with a genuinely bad edge, no
-resampling scheme that only reshuffles LABELS (holding the graph fixed)
-can separate "this edge is bad" from "this edge sits near a bad edge,"
-because the observed data never isolates a single edge's individual
-contribution. Getting a valid guarantee would require a fundamentally
-different framework (closer to causal attribution over a confounded graph
-than standard multiple-hypothesis testing) -- not attempted here. All
-three attempts are reported so the choice of the simple, unguaranteed rule
-is a verified conclusion, not an oversight: this project's Clopper-Pearson
-guarantees are reserved for calibrate_transitivity/ConformalReasoner, which
-calibrate a single THRESHOLD (a well-behaved, low-dimensional object under
-exchangeability); the edge-removal DECISION here is a per-edge selection
-problem with confounded evidence, and no attempt so far has found a valid
-way to give it the same kind of guarantee.
-
+Real, MEASURED tradeoffs: (1) the wrongly-removed rate is not negligible.
+At the default configuration (`identify_frac=0.5, min_evidence=1`), it
+pools to 13-32% across regimes. At the recommended configuration
+(`identify_frac=0.85, min_evidence=2` -- found by a Pareto sweep, and the
+default of `identify_and_prune_edges` below), it drops to 1.5-4.2%, with a
+95% Wilson upper confidence bound of 2.6-8.9% -- at the cost of a smaller
+reserved evaluation set and a somewhat higher cleaned FPR (e.g. ~49% to
+~59% in the dropout-dominant regime, still far below the 77% raw
+baseline). See `run_mitigation_comparison` in `edge_pruning_eval.py`.
 (2) It costs real recall regardless of configuration -- any true claim
-depending solely on a removed edge loses that path; (3) the graph is edited
-in place, a one-way structural change, unlike calibration (which only
-adjusts a threshold and leaves the graph untouched) -- if the query
+depending solely on a removed edge loses that path. (3) The graph is
+edited in place, a one-way structural change, unlike calibration (which
+only adjusts a threshold and leaves the graph untouched) -- if the query
 distribution later differs from the held-out sample used to prune, a
 removed edge might have been needed after all.
 
-SCOPE, checked against a REAL LLM (DeepSeek), not just simulated noise --
+SCOPE, checked against a REAL LLM (DeepSeek, not just simulated noise) --
 see `edge_pruning_llm_eval.py`: on a densely-hallucinated multi-hop-shortcut
-scenario (an LLM's own claimed transitive conclusions treated as direct
-edges -- 69% of them hallucinated, real DeepSeek output, 1960 labeled pairs
-pooled from 3 independent API-call batches), the BLOCKING decision itself
-stayed accurate on real hallucinations, matching the synthetic benchmark's
-precision. But across 15 independent random identify/eval splits of that
-SAME real data, cleaned FPR beat raw FPR in only 11/15 (73%) of splits
-(mean raw FPR 69.6% -> mean cleaned FPR 63.5%) -- a real average
-improvement, but with genuine per-split variance, unlike the near-universal
-win measured in every synthetic regime. Root cause, partially confirmed:
-this scenario's topology (a few hub nodes carrying many hallucinated
-shortcuts) interacts with FuzzyInferenceEngine's row-normalized diffusion
-differently than the synthetic benchmark's sparse, locally-random noise --
-removing some of a node's edges can concentrate transition probability onto
-whichever false edges remain. A candidate fix (`masked_infer` in
-`edge_pruning_llm_eval.py`, normalizing by each node's ORIGINAL out-degree
-so pruning only ever removes confidence mass instead of redistributing it)
-was tried and did NOT resolve the inconsistency -- it beat raw in the SAME
-11/15 splits overall but on a mostly different subset, meaning
-row-normalization is a real contributor but not the whole story; the
-residual variance is unresolved. This mitigation's benefit is therefore NOT
-assumed to generalize beyond the regime it was measured in (locally-random
-1-hop noise at moderate density); a dense, hub-heavy hallucination pattern
-still helps more often than not, but needs its own validation before
-relying on it, and a namespace bug in the first version of this test
-(multiple seeds sharing one fixed node-name universe, corrupting pooled
-ground truth) was found and fixed before this conclusion was reached --
-noted here since it changed the specific numbers without changing the
-qualitative finding.
+scenario, the blocking decision stayed accurate on real hallucinations,
+matching the synthetic benchmark's precision, but the improvement in
+downstream FPR held in only 73% of random identify/eval splits of that
+data (mean 69.6% -> 63.5%), not the near-universal win measured on the
+synthetic benchmark. This mitigation's benefit should therefore NOT be
+assumed to generalize beyond the regime it was measured in
+(locally-random 1-hop noise at moderate density) -- a dense, hub-heavy
+hallucination pattern still helps more often than not, but needs its own
+validation before relying on it.
 """
 from __future__ import annotations
 
