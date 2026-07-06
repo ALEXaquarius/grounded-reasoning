@@ -895,25 +895,6 @@ data and real deployment data is a real risk, not a validated alternative
 — recorded because a decision this consequential should show what was
 tried and rejected, not just what shipped.
 
-**What the classifier was actually trying to buy — reframed as a
-closed-form rule.** The failure above traces to one specific choice: an
-*absolute* fitted cutoff on a feature (false-vote count) whose scale
-differs by ~100× between synthetic data and this real data. This
-project's own conformal calibration avoids exactly this failure mode by
-thresholding on a *rank within a calibration sample* rather than an
-absolute score — distribution-free by construction. Applying the same
-principle to edge pruning, without any fitting: block a candidate once
-its false-vote count reaches a given *quantile* of the false-vote-count
-distribution observed in that graph, instead of a fixed integer
-`min_evidence`. This transfers across the same ~100× scale gap with zero
-retuning (unlike the classifier), landing at the same 11/15 split-reliability
-as the count-based rule. But on the synthetic benchmark it is uniformly
-*more conservative* than `min_evidence=2` — fewer edges blocked, worse FPR
-in every regime — not a strict improvement, so it was not shipped. The
-scale-invariance insight is real and is precisely what the classifier
-needed and lacked; it just does not, on its own, beat what is already
-shipped, only match it under a different, non-tunable parameterization.
-
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 
 Turns the CLUTRR result of §4.4 into a theorem: closure learning is (i)
