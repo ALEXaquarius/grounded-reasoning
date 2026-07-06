@@ -83,25 +83,32 @@ def collect_shortcut_claims(n_seeds: int, top_k: int, model: str, alpha: float =
     gold_edges: set[tuple[str, str]] = set()
 
     for seed in range(n_seeds):
-        alg, words, edges = build_dense_dag(seed=seed_offset + seed, n=22)
+        global_seed = seed_offset + seed
+        alg, words, edges = build_dense_dag(seed=global_seed, n=22)
         # build_dense_dag always draws from the SAME fixed word list
         # (ABSTRACT_WORDS[:n]) regardless of seed -- only the edge structure
         # varies. Pooling multiple seeds' edges/labels into one graph WITHOUT
         # namespacing would let the same node name mean two different,
         # possibly contradictory things across seeds (e.g. "vora relates to
         # sigma" true in one seed's DAG, false in another's), corrupting the
-        # pooled ground truth. Tag every node with its seed to keep each
-        # seed's DAG a fully disjoint subgraph.
-        tag = lambda w: f"s{seed}_{w}"  # noqa: E731
+        # pooled ground truth. Tag every node with its GLOBAL seed
+        # (seed_offset + seed), not the local loop index -- calling this
+        # function more than once with different seed_offsets (as done to
+        # build a larger pooled dataset) would otherwise reuse the same
+        # "s0_", "s1_", ... prefixes across calls, silently colliding two
+        # DIFFERENT DAGs under one node identity (verified: build_dense_dag
+        # produces genuinely different edge sets at different seeds despite
+        # sharing the same fixed vocabulary).
+        tag = lambda w: f"s{global_seed}_{w}"  # noqa: E731
         edges = [(tag(a), tag(b)) for a, b in edges]
         universe = {tag(w) for w in words}
         factstr = "\n".join(f"- {a} relates to {b}." for a, b in sorted(edges))
         base_edges.extend(edges)
         gold_edges |= set(edges)
 
-        srcs = sorted({a for a, _ in edges}, key=lambda x: -len(alg.closure(x[len(f"s{seed}_"):], "relates to")))[:top_k]
+        srcs = sorted({a for a, _ in edges}, key=lambda x: -len(alg.closure(x[len(f"s{global_seed}_"):], "relates to")))[:top_k]
         for x_tagged in srcs:
-            x = x_tagged[len(f"s{seed}_"):]
+            x = x_tagged[len(f"s{global_seed}_"):]
             truth = {tag(t) for t in alg.closure(x, "relates to")}
             prompt = (
                 f"Facts (use ONLY these):\n{factstr}\n\n"
