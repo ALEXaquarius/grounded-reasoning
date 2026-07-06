@@ -68,6 +68,16 @@ assumed to generalize beyond the regime it was measured in
 (locally-random 1-hop noise at moderate density) -- a dense, hub-heavy
 hallucination pattern still helps more often than not, but needs its own
 validation before relying on it.
+
+A topology-aware variant (requiring less evidence to remove an edge
+pointing at a high-centrality "hub" node, more for a peripheral one, since
+a bad hub-attachment does outsized damage) was tried against both
+benchmarks: on the synthetic one it was statistically indistinguishable
+from just raising `min_evidence` uniformly (no real structural gain); on
+the real hallucination data it touched ~5x fewer edges for comparable or
+slightly better mean FPR, but did not improve the underlying 73% split
+reliability. Not adopted -- a different tradeoff point (much less graph
+editing), not a resolved improvement.
 """
 from __future__ import annotations
 
