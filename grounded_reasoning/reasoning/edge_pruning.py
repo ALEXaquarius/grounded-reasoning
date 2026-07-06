@@ -78,6 +78,24 @@ in place, a one-way structural change, unlike calibration (which only
 adjusts a threshold and leaves the graph untouched) -- if the query
 distribution later differs from the held-out sample used to prune, a
 removed edge might have been needed after all.
+
+SCOPE, checked against a REAL LLM (DeepSeek), not just simulated noise --
+see `edge_pruning_llm_eval.py`: on a densely-hallucinated multi-hop-shortcut
+scenario (an LLM's own claimed transitive conclusions treated as direct
+edges -- 65-73% of them hallucinated, real DeepSeek output), the BLOCKING
+decision itself stayed accurate (3-4% wrongly blocked, matching the
+synthetic benchmark), but the downstream effect on cleaned FPR was
+INCONSISTENT across 3 independent trials (2 improved, 1 got worse) --
+unlike the consistent 5/5-regime win measured synthetically. Root cause:
+that scenario's topology (a few hub nodes carrying many hallucinated
+shortcuts) interacts with FuzzyInferenceEngine's row-normalized diffusion
+differently than the synthetic benchmark's sparse, locally-random noise --
+removing some of a node's edges can concentrate transition probability
+onto whichever false edges remain. This mitigation's benefit is therefore
+NOT assumed to generalize beyond the regime it was measured in
+(locally-random 1-hop noise at moderate density); a dense,
+hub-heavy hallucination pattern needs its own validation before relying on
+it.
 """
 from __future__ import annotations
 
