@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **`identify_suspect_edges` / `prune_edges` / `identify_and_prune_edges`**
+  (`grounded_reasoning/reasoning/edge_pruning.py`) — held-out-evidence edge
+  pruning: identifies and removes specific spurious edges from a noisy
+  relation graph using held-out labeled evidence, instead of only
+  recalibrating a threshold around them. A simple decision rule, not a
+  statistical guarantee — no false-discovery-rate bound, verified
+  empirically instead. Cuts false-positive rate substantially and
+  consistently across 5 synthetic noise regimes (e.g. 77% → 49% under
+  dropout-dominant noise), while the wrongly-removed rate at the
+  recommended configuration (`identify_frac=0.85, min_evidence=2`, the
+  default of `identify_and_prune_edges`) stays at 1.5–4.2% (95% upper
+  bound 2.6–8.9%) — down from 13–32% at the naive default split. Checked
+  against real DeepSeek hallucinations, not just simulated noise: the
+  blocking decision stays accurate, though the downstream FPR benefit is
+  less reliable (~73% of evaluation splits) on a densely-hallucinated,
+  hub-node-heavy real scenario than on the synthetic benchmark — a scope
+  limit that is disclosed, not hidden. See `edge_pruning_eval.py`,
+  `edge_pruning_llm_eval.py`, `tests/test_edge_pruning.py`, and PAPER.md
+  §7.1's remark.
+
 ## 0.1.7 — Heterogeneous paths, deeper fuzzing, SGDC calibration, and two conformal extensions
 
 ### Added

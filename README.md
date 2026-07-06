@@ -381,9 +381,10 @@ guarantee instead of hard precision.
 | `grounded_reasoning/reasoning/composition_algebra.py` | Composition-table learning, validated on CLUTRR (Theorem J) |
 | `grounded_reasoning/reasoning/horn.py` | Horn forward-chaining, least-model semantics (Theorem L) |
 | `grounded_reasoning/reasoning/transitivity_calibration.py` | Clopper-Pearson calibration — reused for both the transitivity assumption (Theorem M) and the normalization over-merge risk (Theorem N) |
+| `grounded_reasoning/reasoning/edge_pruning.py` | Held-out-evidence edge pruning — a heuristic decision rule, not a Theorem, with its own measured tradeoffs |
 | `grounded_reasoning/reasoning/llm_client.py` | Provider-agnostic LLM client (key read from an env var) |
 | `grounded_reasoning/theory/theorems.py` | **Nine theorems (F–N)** with numerical verification |
-| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,self_grounded_calibration,nl_ontology,guard_cost,clutrr,conformal_llm,redundancy_conformal,drift_conformal,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
+| `grounded_reasoning/experiments/{guard_llm,guard_llm_stress,self_grounded,self_grounded_calibration,nl_ontology,guard_cost,clutrr,conformal_llm,redundancy_conformal,drift_conformal,inference,transitivity_calibration,normalization_calibration,heterogeneous_path_calibration,edge_pruning,edge_pruning_llm}_eval.py` | Real-LLM and benchmark experiments backing every claim above |
 | `examples/hallucination_demo.py` | End-to-end function-calling demo (real LLM, needs a key) |
 | `examples/self_grounded_demo.py` | SGDC (Theorem I): self-verify a model's own multi-hop claim with NO external KB (offline) |
 | `examples/rag_pipeline_demo.py` | `filter_claims` as a RAG/agent post-processing guard, heterogeneous claims (offline) |

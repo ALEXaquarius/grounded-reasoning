@@ -375,6 +375,7 @@ cần cấu hình.
 | `grounded_reasoning/reasoning/composition_algebra.py` | Học bảng hợp thành, kiểm chứng trên CLUTRR (Định lý J) |
 | `grounded_reasoning/reasoning/horn.py` | Suy diễn tiến Horn, ngữ nghĩa least-model (Định lý L) |
 | `grounded_reasoning/reasoning/transitivity_calibration.py` | Hiệu chỉnh Clopper-Pearson — tái dùng cho cả giả định bắc cầu (Định lý M) và rủi ro gộp nhầm khi chuẩn hóa (Định lý N) |
+| `grounded_reasoning/reasoning/edge_pruning.py` | Xóa cạnh dựa trên bằng chứng giữ riêng — một luật heuristic, không phải Định lý, có đánh đổi riêng đã đo lường |
 | `grounded_reasoning/reasoning/llm_client.py` | LLM client không phụ thuộc nhà cung cấp (key đọc từ biến môi trường) |
 | `grounded_reasoning/theory/theorems.py` | **Chín định lý (F–N)** với kiểm chứng số |
 | `grounded_reasoning/experiments/*.py` | Thực nghiệm LLM thật và benchmark hậu thuẫn mọi khẳng định trên |

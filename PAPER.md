@@ -918,7 +918,7 @@ omnipotent oracle.
 
 - Engine: `grounded_reasoning/reasoning/{abstract_inference,operator_algebra,relation_spectrum}.py`
 - LLM client (key read from an environment variable): `grounded_reasoning/reasoning/llm_client.py`
-- Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,guard_llm_stress_eval,nl_ontology_eval,guard_cost_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval}.py`
+- Real-LLM experiments: `grounded_reasoning/experiments/{guard_llm_eval,guard_llm_stress_eval,nl_ontology_eval,guard_cost_eval,clutrr_eval,conformal_llm_eval,self_grounded_eval,edge_pruning_llm_eval}.py`
 - Offline-only experiments (synthetic ground truth, no LLM call): `grounded_reasoning/experiments/{inference_eval,transitivity_calibration_eval,normalization_calibration_eval,heterogeneous_path_calibration_eval,self_grounded_calibration_eval,redundancy_conformal_eval,drift_conformal_eval,edge_pruning_eval}.py`
 - Nine theorems (F–N): `grounded_reasoning/theory/theorems.py`, exercised by `tests/test_theorems.py`
 - Full test suite: `pytest tests/` (no API key required — every LLM-dependent
