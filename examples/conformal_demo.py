@@ -21,12 +21,14 @@ the false-positive rate on unrelated pairs -- the "price paid" half of the
 tradeoff that a coverage number alone doesn't show -- and by comparing a
 clean graph against a noisy one side by side.
 
-Two further sections show the two ways to push efficiency further without
-losing the coverage guarantee: `mondrian_demo` (a separate threshold per
-path-redundancy group, best when the noise is dominated by DROPPED edges)
-and `drift_demo` (a threshold that ADAPTS over time, needed when the noise
-level itself changes between batches -- something no fixed calibration,
-grouped or not, can handle).
+Three further sections show ways to push efficiency further: `mondrian_demo`
+(a separate threshold per path-redundancy group, best when the noise is
+dominated by DROPPED edges), `drift_demo` (a threshold that ADAPTS over
+time, needed when the noise level itself changes between batches), and
+`edge_pruning_demo` (remove the specific edges responsible for false
+conclusions BEFORE calibrating, instead of only tolerating them with a
+lower threshold -- the only one of the three with no formal guarantee of
+its own, since calibration's coverage guarantee is preserved either way).
 
 Fully offline, synthetic ground truth and synthetic noise (no LLM call) --
 see conformal_llm_eval.py for the same idea end-to-end on a REAL LLM's
@@ -44,6 +46,7 @@ import random
 from grounded_reasoning import AdaptiveConformalReasoner, ConformalReasoner
 from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 from grounded_reasoning.reasoning.conformal_reasoning import conformal_threshold, redundancy_group
+from grounded_reasoning.reasoning.edge_pruning import identify_and_prune_edges
 
 
 def build_world(seed: int, p_drop: float, n: int = 45, p_add: float = 0.0):
@@ -78,22 +81,25 @@ def build_world(seed: int, p_drop: float, n: int = 45, p_add: float = 0.0):
 
     truth = {x: closure(x) for x in range(n)}
     eng = FuzzyInferenceEngine(walk_len=10, alpha=0.7)
+    edges: list[tuple[int, int]] = []
     n_dropped = 0
     for a, b in sorted(true_edges):
         if rng.random() > p_drop:
             eng.add_relation(a, b)
+            edges.append((a, b))
         else:
             n_dropped += 1
     for _ in range(int(p_add * len(true_edges))):
         a, b = rng.randint(0, n - 1), rng.randint(0, n - 1)
         if a != b:
             eng.add_relation(a, b)
-    return eng, truth, len(true_edges), n_dropped, rng
+            edges.append((a, b))
+    return eng, truth, len(true_edges), n_dropped, rng, edges
 
 
 def measure(seed: int, alpha: float, p_drop: float, n: int = 45, p_add: float = 0.0,
             use_redundancy_grouping: bool = False):
-    eng, truth, n_edges, n_dropped, rng = build_world(seed, p_drop, n, p_add)
+    eng, truth, n_edges, n_dropped, rng, _ = build_world(seed, p_drop, n, p_add)
     infc = {x: eng.infer(x) for x in range(n)}
     true_pairs = [(x, b) for x in range(n) for b in truth[x]]
     # only pairs with SOME diffusion score are genuine false-positive candidates
@@ -198,6 +204,81 @@ def mondrian_demo() -> None:
     )
 
 
+def edge_pruning_demo() -> None:
+    print("\n" + "=" * 74)
+    print("A THIRD way to push efficiency: remove the specific bad edges first,")
+    print("then calibrate on what's left (identify_and_prune_edges)")
+    print("=" * 74)
+
+    alpha, n_seeds, p_drop, p_add = 0.1, 20, 0.2, 0.3
+
+    def calibrate_and_measure(eng, n, reserved_pairs, seed):
+        infc_e = {x: eng.infer(x) for x in range(n)}
+        reserved_true = [(x, b) for x, b, t in reserved_pairs if t]
+        reserved_false = [(x, b) for x, b, t in reserved_pairs if not t]
+        if not reserved_true or not reserved_false:
+            return None
+        rng2 = random.Random(seed + 1)
+        tr = list(reserved_true)
+        rng2.shuffle(tr)
+        half = len(tr) // 2
+        cal, test = tr[:half], tr[half:]
+        if not cal or not test:
+            return None
+        tau = conformal_threshold([infc_e[x].get(b, 0.0) for x, b in cal], alpha)
+        coverage = sum(1 for x, b in test if infc_e[x].get(b, 0.0) >= tau) / len(test)
+        fpr = sum(1 for x, b in reserved_false if infc_e[x].get(b, 0.0) >= tau) / len(reserved_false)
+        return coverage, fpr
+
+    covs_raw, fprs_raw, covs_cleaned, fprs_cleaned = [], [], [], []
+    n_blocked_total, n_edges_total = 0, 0
+    for seed in range(n_seeds):
+        eng_raw, truth, n, _, rng, edges = build_world(seed, p_drop, p_add=p_add)
+        infc = {x: eng_raw.infer(x) for x in range(n)}
+        all_candidates = [(x, b) for x in range(n) for b in range(n) if x != b and b in infc[x]]
+        rng.shuffle(all_candidates)
+        labeled_pairs = [(x, b, b in truth[x]) for x, b in all_candidates]
+
+        # identify_and_prune_edges splits labeled_pairs itself (85%/15% by
+        # default) and hands back the untouched reserved share -- using it
+        # for calibration/evaluation here keeps the same discipline as
+        # everywhere else in this project: never trust a graph's scores on
+        # the same evidence used to decide the graph's structure.
+        cleaned_edges, blocked, reserved_pairs = identify_and_prune_edges(edges, labeled_pairs, seed=seed)
+        eng_cleaned = FuzzyInferenceEngine(walk_len=10, alpha=0.7)
+        for a, b in cleaned_edges:
+            eng_cleaned.add_relation(a, b)
+
+        r_raw = calibrate_and_measure(eng_raw, n, reserved_pairs, seed)
+        r_cleaned = calibrate_and_measure(eng_cleaned, n, reserved_pairs, seed)
+        if r_raw is None or r_cleaned is None:
+            continue
+        covs_raw.append(r_raw[0])
+        fprs_raw.append(r_raw[1])
+        covs_cleaned.append(r_cleaned[0])
+        fprs_cleaned.append(r_cleaned[1])
+        n_blocked_total += len(blocked)
+        n_edges_total += len(edges)
+
+    avg = lambda xs: sum(xs) / len(xs)  # noqa: E731
+    print(f"\n{n_blocked_total}/{n_edges_total} edges flagged as suspect and removed across "
+          f"{len(fprs_raw)} seeds (held-out evidence per seed).")
+    print(f"RAW graph:     coverage={avg(covs_raw):.1%}  fpr={avg(fprs_raw):.1%}")
+    print(f"CLEANED graph: coverage={avg(covs_cleaned):.1%}  fpr={avg(fprs_cleaned):.1%}")
+    print(
+        "\nHow: cleaned_edges, blocked, reserved = identify_and_prune_edges(edges,\n"
+        "labeled_pairs); calibrate a ConformalReasoner on `reserved` as usual. Coverage\n"
+        "is essentially unchanged either way -- calibration re-adjusts the threshold\n"
+        "for whatever graph it's given, so the guarantee never depended on the pruning\n"
+        "decision being correct. FPR is what improves: removing the specific edges\n"
+        "responsible for false conclusions, instead of just tolerating them with a\n"
+        "lower threshold. Unlike Mondrian grouping or ACI above, this one is NOT a\n"
+        "statistical guarantee -- it's a heuristic with a measured, nonzero chance of\n"
+        "removing a genuinely correct edge; see PAPER.md §7.1 and edge_pruning.py for\n"
+        "the honest numbers and what was tried and rejected."
+    )
+
+
 def drift_demo() -> None:
     print("\n" + "=" * 74)
     print("A DIFFERENT problem: the noise level changing over time, not just")
@@ -247,3 +328,4 @@ if __name__ == "__main__":
     main()
     mondrian_demo()
     drift_demo()
+    edge_pruning_demo()
