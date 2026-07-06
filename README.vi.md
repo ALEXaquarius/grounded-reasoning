@@ -248,9 +248,16 @@ chứng với LLM thật (DeepSeek), không chỉ mô phỏng: quyết định c
 vẫn chính xác trên ảo giác thật, nhưng lợi ích FPR chỉ giữ được ở ~73% số
 lần chia dữ liệu đánh giá trong một kịch bản ảo giác dày đặc qua hub-node
 — đáng tin ở đúng chế độ nhiễu đã đo (nhiễu cục bộ ngẫu nhiên 1-hop),
-không đảm bảo tổng quát hóa ra ngoài đó. Cách này vẫn luôn tốn recall
-thật với claim đúng chỉ dựa vào đúng cạnh đó, và sửa đồ thị một chiều
-(khác calibration chỉ chỉnh ngưỡng).
+không đảm bảo tổng quát hóa ra ngoài đó. Một cải tiến tất định (không
+dùng ML) riêng cho kịch bản hub dày đặc này —
+`identify_and_prune_edges(..., use_propagation=True)` — chặn được nhiều
+hơn ~2.6 lần số cạnh ảo giác thật ở đó với cùng độ tin cậy và FPR trung
+bình nhỉnh hơn, không hồi quy trên benchmark tổng hợp — tùy chọn bật
+thêm, vì lợi ích chỉ dành riêng cho đồ thị dạng hub dày đặc. Một phương
+án học máy (logistic regression) cũng đã thử và bị loại: không tổng
+quát hóa được từ dữ liệu huấn luyện tổng hợp sang dữ liệu thật. Cách này
+vẫn luôn tốn recall thật với claim đúng chỉ dựa vào đúng cạnh đó, và sửa
+đồ thị một chiều (khác calibration chỉ chỉnh ngưỡng).
 [`edge_pruning_eval.py`](grounded_reasoning/experiments/edge_pruning_eval.py),
 [`edge_pruning_llm_eval.py`](grounded_reasoning/experiments/edge_pruning_llm_eval.py),
 phần remark ở PAPER.md §7.1.

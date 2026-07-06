@@ -142,6 +142,79 @@ def identify_suspect_edges(
     }
 
 
+def identify_suspect_edges_propagated(
+    edges: list[tuple[str, str]],
+    labeled_pairs: list[tuple[str, str, bool]],
+    walk_len: int = 8,
+    alpha: float = 0.6,
+    min_evidence: int = 2,
+    propagated_min_evidence: int = 1,
+) -> set[tuple[str, str]]:
+    """
+    A deterministic two-pass refinement of `identify_suspect_edges` -- no
+    fitted parameters, no learned weights. Once ANY edge into a target
+    node is confirmed suspect (>=min_evidence false votes, zero true
+    votes), that target is treated as a "hallucination magnet": its OTHER
+    candidate incoming edges (also zero true votes) only need
+    `propagated_min_evidence` (lower) false-claim corroboration to be
+    removed too, instead of independently clearing `min_evidence` alone.
+
+    Why: `identify_suspect_edges` decides each edge independently. When a
+    hub node has SEVERAL bad incoming edges but only some individually
+    clear `min_evidence`, the ones left behind benefit from
+    FuzzyInferenceEngine's row-normalized diffusion (P = D^-1 W):
+    removing some of a node's incoming edges elsewhere in the graph does
+    not directly change this, but removing some of a *source* node's
+    OTHER outgoing edges concentrates that source's transition
+    probability onto whichever of its edges remain -- including any
+    still-bad one landing on this same magnet target that wasn't
+    individually blocked. This is the mechanism diagnosed behind the
+    real-LLM inconsistency in the module docstring. Once one bad edge
+    into a target is confirmed, that itself is corroborating evidence
+    that other suspicious-looking edges into the SAME target are not
+    just identification noise.
+
+    Measured (`edge_pruning_eval.py` / `edge_pruning_llm_eval.py`): on the
+    synthetic benchmark (identify_frac=0.85, 200 seeds/regime),
+    essentially identical to `identify_suspect_edges(min_evidence=2)` --
+    sparse, locally-random noise rarely puts multiple suspect edges on
+    the same target, so the propagation step rarely fires (no
+    regression). On the real DeepSeek hallucination data (hub-node-heavy
+    by construction), it blocks ~2.6x more edges than the plain rule
+    while keeping the pooled wrongly-blocked rate low (~3.4%) and the
+    same 11/15 (73%) split-reliability against the raw graph, with a
+    slightly better mean FPR (62.0% vs 63.5%) -- a real, deterministic
+    improvement on the specific regime the plain rule was weakest on, not
+    a full fix (the underlying 73% reliability is unchanged, not solved).
+    """
+    eng = FuzzyInferenceEngine(walk_len=walk_len, alpha=alpha)
+    for a, b in edges:
+        eng.add_relation(a, b)
+
+    true_votes: dict[tuple[str, str], int] = {}
+    false_votes: dict[tuple[str, str], int] = {}
+    for subject, obj, is_true in labeled_pairs:
+        path = eng.explain(subject, obj)
+        if path is None:
+            continue
+        path_edges = set(zip(path, path[1:]))
+        if is_true:
+            for e in path_edges:
+                true_votes[e] = true_votes.get(e, 0) + 1
+        else:
+            for e in path_edges:
+                false_votes[e] = false_votes.get(e, 0) + 1
+
+    candidates = {e for e in false_votes if true_votes.get(e, 0) == 0}
+    blocked = {e for e in candidates if false_votes[e] >= min_evidence}
+    magnet_targets = {b for _, b in blocked}
+    for e in candidates - blocked:
+        _, b = e
+        if b in magnet_targets and false_votes[e] >= propagated_min_evidence:
+            blocked.add(e)
+    return blocked
+
+
 def prune_edges(
     edges: list[tuple[str, str]],
     blocked: set[tuple[str, str]],
@@ -158,6 +231,8 @@ def identify_and_prune_edges(
     walk_len: int = 8,
     alpha: float = 0.6,
     seed: int | None = None,
+    use_propagation: bool = False,
+    propagated_min_evidence: int = 1,
 ) -> tuple[list[tuple[str, str]], set[tuple[str, str]], list[tuple[str, str, bool]]]:
     """
     Convenience wrapper applying the measured-safest configuration by
@@ -168,6 +243,16 @@ def identify_and_prune_edges(
     and a reserved share, calls `identify_suspect_edges` on the
     identification share only, prunes the result, and returns
     `(cleaned_edges, blocked_edges, reserved_pairs)`.
+
+    `use_propagation=True` swaps in `identify_suspect_edges_propagated`
+    instead of the plain rule -- opt-in, not the default, since its
+    measured benefit is specific to hub-heavy graphs (see that function's
+    docstring): essentially no effect on locally-random noise, but blocks
+    substantially more real hallucinated edges on dense, hub-node-heavy
+    data (e.g. an LLM's own multi-hop shortcuts converging on popular
+    concepts) at the same reliability and a slightly better mean FPR.
+    Recommended when your deployment's graph has that shape; the plain
+    default is the safer choice when it doesn't or you're unsure.
 
     `reserved_pairs` is disjoint from whatever was used to decide removal,
     so it's safe to use to independently evaluate the cleaned graph (the
@@ -184,8 +269,14 @@ def identify_and_prune_edges(
     rng.shuffle(shuffled)
     split = int(len(shuffled) * identify_frac)
     identify_pairs, reserved_pairs = shuffled[:split], shuffled[split:]
-    blocked = identify_suspect_edges(
-        edges, identify_pairs, walk_len=walk_len, alpha=alpha, min_evidence=min_evidence
-    )
+    if use_propagation:
+        blocked = identify_suspect_edges_propagated(
+            edges, identify_pairs, walk_len=walk_len, alpha=alpha,
+            min_evidence=min_evidence, propagated_min_evidence=propagated_min_evidence,
+        )
+    else:
+        blocked = identify_suspect_edges(
+            edges, identify_pairs, walk_len=walk_len, alpha=alpha, min_evidence=min_evidence
+        )
     cleaned = prune_edges(edges, blocked)
     return cleaned, blocked, reserved_pairs

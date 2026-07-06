@@ -42,6 +42,26 @@ helps more often than not on this densely-hallucinated, hub-heavy real
 scenario, but not as reliably as on the synthetic benchmark, and should
 not be assumed to generalize without separate validation on data
 resembling the deployment's actual topology.
+
+A deterministic (no ML, no fitted parameters) refinement,
+`identify_suspect_edges_propagated` in `edge_pruning.py`, targets this
+hub-heavy case directly: once one incoming edge to a target is confirmed
+bad, treat that target as a "hallucination magnet" and lower the evidence
+bar for its OTHER candidate incoming edges too. `run_propagation_comparison`
+below is the analysis behind its docstring's claim: on this same real
+data, it blocks ~2.6x more edges than plain pruning (9847 vs 3788 across
+15 splits) while keeping the pooled wrongly-blocked rate low (3.4% vs
+1.0%) and the SAME 11/15 split-reliability against raw, with a slightly
+better mean FPR (62.0% vs 63.5%). A supervised (logistic regression)
+classifier over these same features was ALSO tried, cross-validated for
+stability across 5 independent training runs (consistent results), but
+failed to generalize from synthetic training data to this real data at
+all -- it blocked 0 edges outright until its per-feature normalization was
+manually adapted to the real data's scale, and even then performed WORSE
+than both raw and plain pruning (mean FPR 78.2%). Not adopted, and not
+reflected in edge_pruning.py, since a fitted model that fails this badly
+under distribution shift is a real generalization risk, not a validated
+alternative -- kept here only as a cautionary result.
 """
 from __future__ import annotations
 
@@ -256,6 +276,75 @@ def run_multi_split(n_seeds: int = 4, top_k: int = 10, model: str = "deepseek-ch
             f"\nAcross {n_valid} random identify/eval splits of the same real LLM-hallucinated "
             f"data:\n topological pruning beat raw in {topo_beats_raw}/{n_valid}; "
             f"masked_infer beat raw in {masked_beats_raw}/{n_valid}."
+        )
+    return res
+
+
+def run_propagation_comparison(n_seeds: int = 4, top_k: int = 10, model: str = "deepseek-chat",
+                                alpha: float = 0.1, walk_len: int = 8, diffusion_alpha: float = 0.6,
+                                seed_offset: int = 100, n_splits: int = 15, verbose: bool = True) -> dict:
+    """
+    The analysis behind `identify_suspect_edges_propagated`'s docstring
+    claim: fetches real LLM-hallucinated shortcut claims ONCE, then
+    compares plain topological pruning (`use_propagation=False`) against
+    the propagated variant (`use_propagation=True`) across `n_splits`
+    random identify/eval splits of that SAME data (free -- no extra API
+    calls), on both downstream FPR and the wrongly-blocked rate (pooled
+    across splits, since this data's hub-heavy topology is exactly where
+    propagation is expected to matter).
+    """
+    base_edges, shortcut_edges, labeled_pairs, gold_edges, client = collect_shortcut_claims(
+        n_seeds, top_k, model, alpha, seed_offset
+    )
+    full_edges = list(set(base_edges) | set(shortcut_edges))
+
+    topo_beats_raw = prop_beats_raw = n_valid = 0
+    raw_fprs, topo_fprs, prop_fprs = [], [], []
+    topo_blocked_total = topo_wrong_total = prop_blocked_total = prop_wrong_total = 0
+    for split_seed in range(n_splits):
+        cleaned_topo, blocked_topo, reserved_pairs = identify_and_prune_edges(
+            full_edges, labeled_pairs, walk_len=walk_len, alpha=diffusion_alpha, seed=split_seed
+        )
+        cleaned_prop, blocked_prop, _ = identify_and_prune_edges(
+            full_edges, labeled_pairs, walk_len=walk_len, alpha=diffusion_alpha, seed=split_seed,
+            use_propagation=True,
+        )
+        topo_blocked_total += len(blocked_topo)
+        topo_wrong_total += sum(1 for e in blocked_topo if e in gold_edges)
+        prop_blocked_total += len(blocked_prop)
+        prop_wrong_total += sum(1 for e in blocked_prop if e in gold_edges)
+
+        r_raw = score_graph(full_edges, reserved_pairs, walk_len, diffusion_alpha, alpha, split_seed)
+        r_topo = score_graph(cleaned_topo, reserved_pairs, walk_len, diffusion_alpha, alpha, split_seed)
+        r_prop = score_graph(cleaned_prop, reserved_pairs, walk_len, diffusion_alpha, alpha, split_seed)
+        if r_raw is None or r_topo is None or r_prop is None:
+            continue
+        n_valid += 1
+        raw_fprs.append(r_raw[1])
+        topo_fprs.append(r_topo[1])
+        prop_fprs.append(r_prop[1])
+        topo_beats_raw += r_topo[1] < r_raw[1]
+        prop_beats_raw += r_prop[1] < r_raw[1]
+
+    res = {
+        "n_valid_splits": n_valid,
+        "topo_beats_raw": topo_beats_raw, "prop_beats_raw": prop_beats_raw,
+        "mean_raw_fpr": round(sum(raw_fprs) / n_valid, 3),
+        "mean_topo_fpr": round(sum(topo_fprs) / n_valid, 3),
+        "mean_prop_fpr": round(sum(prop_fprs) / n_valid, 3),
+        "topo_n_blocked": topo_blocked_total, "topo_wrongly_blocked_rate": round(topo_wrong_total / max(topo_blocked_total, 1), 3),
+        "prop_n_blocked": prop_blocked_total, "prop_wrongly_blocked_rate": round(prop_wrong_total / max(prop_blocked_total, 1), 3),
+        "llm_tokens": client.total_tokens,
+    }
+    if verbose:
+        import json
+        print(json.dumps(res, indent=2))
+        print(
+            f"\nAcross {n_valid} random identify/eval splits of the same real LLM-hallucinated data:\n"
+            f" plain pruning: beat raw {topo_beats_raw}/{n_valid}, blocked {topo_blocked_total} edges "
+            f"({res['topo_wrongly_blocked_rate']:.1%} wrongly).\n"
+            f" propagated:    beat raw {prop_beats_raw}/{n_valid}, blocked {prop_blocked_total} edges "
+            f"({res['prop_wrongly_blocked_rate']:.1%} wrongly)."
         )
     return res
 

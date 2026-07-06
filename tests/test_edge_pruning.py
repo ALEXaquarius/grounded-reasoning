@@ -7,6 +7,7 @@ from grounded_reasoning.reasoning.abstract_inference import FuzzyInferenceEngine
 from grounded_reasoning.reasoning.edge_pruning import (
     identify_and_prune_edges,
     identify_suspect_edges,
+    identify_suspect_edges_propagated,
     prune_edges,
 )
 from grounded_reasoning.experiments.edge_pruning_eval import (
@@ -128,3 +129,117 @@ def test_identify_and_prune_edges_is_deterministic_given_a_seed():
     r1 = identify_and_prune_edges(edges, labeled, seed=42)
     r2 = identify_and_prune_edges(edges, labeled, seed=42)
     assert r1 == r2
+
+
+def test_propagation_blocks_a_second_edge_sharing_a_confirmed_bad_target():
+    # p1->hub gets 2 false votes (clears min_evidence=2 under the plain
+    # rule); p2->hub only gets 1 (would NOT clear it alone). Once hub is a
+    # confirmed "magnet", p2->hub should be swept in too by propagation.
+    # q1->other also gets only 1 false vote but "other" has no confirmed-bad
+    # edge -- it must NOT be blocked, proving propagation is target-specific,
+    # not a blanket lowering of the threshold everywhere.
+    edges = [("p1", "hub"), ("p2", "hub"), ("q1", "other"), ("a", "b"), ("b", "c")]
+    labeled = [
+        ("p1", "hub", False), ("p1", "hub", False),
+        ("p2", "hub", False),
+        ("q1", "other", False),
+        ("a", "c", True),
+    ]
+    plain = identify_suspect_edges(edges, labeled, min_evidence=2)
+    assert plain == {("p1", "hub")}
+
+    propagated = identify_suspect_edges_propagated(
+        edges, labeled, min_evidence=2, propagated_min_evidence=1
+    )
+    assert propagated == {("p1", "hub"), ("p2", "hub")}
+    assert ("q1", "other") not in propagated
+
+
+def test_propagation_never_blocks_an_edge_with_true_support_even_via_a_magnet():
+    # p1->hub confirmed bad; p2->hub has a TRUE vote too -- must survive
+    # propagation exactly as it survives the plain rule (a true vote is
+    # always decisive, regardless of the target's magnet status).
+    edges = [("p1", "hub"), ("p2", "hub")]
+    labeled = [
+        ("p1", "hub", False), ("p1", "hub", False),
+        ("p2", "hub", True), ("p2", "hub", False),
+    ]
+    propagated = identify_suspect_edges_propagated(edges, labeled, min_evidence=2, propagated_min_evidence=1)
+    assert propagated == {("p1", "hub")}
+    assert ("p2", "hub") not in propagated
+
+
+def test_use_propagation_flag_is_opt_in_and_off_by_default():
+    edges = [("p1", "hub"), ("p2", "hub"), ("a", "b"), ("b", "c")]
+    labeled = [
+        ("p1", "hub", False), ("p1", "hub", False),
+        ("p2", "hub", False),
+        ("a", "c", True),
+    ]
+    _, blocked_default, _ = identify_and_prune_edges(edges, labeled, identify_frac=1.0, min_evidence=2, seed=0)
+    _, blocked_propagated, _ = identify_and_prune_edges(
+        edges, labeled, identify_frac=1.0, min_evidence=2, seed=0, use_propagation=True
+    )
+    assert ("p2", "hub") not in blocked_default
+    assert ("p2", "hub") in blocked_propagated
+
+
+def test_propagation_does_not_regress_synthetic_benchmark_fpr():
+    # the measured claim: propagation is statistically indistinguishable
+    # from the plain rule on sparse, locally-random noise (it should not
+    # make things WORSE there even though its benefit is elsewhere)
+    from grounded_reasoning.experiments.edge_pruning_eval import SCENARIOS, build_true_dag, noisy_edges
+    from grounded_reasoning.reasoning.conformal_reasoning import conformal_threshold
+    import random
+
+    def measure(seed, p_drop, p_add, use_propagation, n=45, identify_frac=0.85, alpha=0.1):
+        n, true_edges, truth = build_true_dag(seed, n)
+        rng = random.Random(1000 + seed)
+        edges = list(noisy_edges(true_edges, n, rng, p_drop, p_add))
+        eng_raw = FuzzyInferenceEngine(walk_len=12, alpha=0.7)
+        for a, b in edges:
+            eng_raw.add_relation(a, b)
+        infc_raw = {x: eng_raw.infer(x) for x in range(n)}
+        all_candidates = [(x, b) for x in range(n) for b in range(n) if x != b and b in infc_raw[x]]
+        rng2 = random.Random(3000 + seed)
+        rng2.shuffle(all_candidates)
+        labeled_pairs = [(x, b, b in truth[x]) for x, b in all_candidates]
+        cleaned, blocked, reserved = identify_and_prune_edges(
+            edges, labeled_pairs, identify_frac=identify_frac, walk_len=12, alpha=0.7,
+            seed=seed, use_propagation=use_propagation,
+        )
+        eng_clean = FuzzyInferenceEngine(walk_len=12, alpha=0.7)
+        for a, b in cleaned:
+            eng_clean.add_relation(a, b)
+        infc = {x: eng_clean.infer(x) for x in range(n)}
+        jit_rng = random.Random(5000 + seed)
+        scores = {(x, b): infc[x].get(b, 0.0) + jit_rng.uniform(0, 1e-9) for x, b, _ in reserved}
+        true_eval = [(x, b) for x, b, t in reserved if t]
+        false_eval = [(x, b) for x, b, t in reserved if not t]
+        if not true_eval or not false_eval:
+            return None
+        r = random.Random(6000 + seed)
+        tr = list(true_eval)
+        r.shuffle(tr)
+        h = len(tr) // 2
+        cal, test = tr[:h], tr[h:]
+        if not cal or not test:
+            return None
+        tau = conformal_threshold([scores[p] for p in cal], alpha)
+        fpr = sum(1 for p in false_eval if scores[p] >= tau) / len(false_eval)
+        return fpr
+
+    n_seeds = 30
+    for label, (p_drop, p_add) in SCENARIOS.items():
+        plain_fprs, prop_fprs = [], []
+        for seed in range(n_seeds):
+            fp = measure(seed, p_drop, p_add, use_propagation=False)
+            fq = measure(seed, p_drop, p_add, use_propagation=True)
+            if fp is not None:
+                plain_fprs.append(fp)
+            if fq is not None:
+                prop_fprs.append(fq)
+        mean_plain = sum(plain_fprs) / len(plain_fprs)
+        mean_prop = sum(prop_fprs) / len(prop_fprs)
+        # propagation must not be MEANINGFULLY worse on this regime
+        assert mean_prop < mean_plain + 0.10, f"{label}: plain={mean_plain:.1%} prop={mean_prop:.1%}"

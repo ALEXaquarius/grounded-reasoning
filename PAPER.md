@@ -865,6 +865,36 @@ measured in** (locally-random 1-hop noise at moderate density); a dense,
 hub-heavy hallucination pattern still helps more often than not, but needs
 its own validation before relying on it.
 
+**A deterministic refinement targeting this hub-heavy case directly** —
+`identify_suspect_edges_propagated` (no fitted parameters, no ML): once
+one incoming edge to a target is confirmed bad, its target is treated as
+a "hallucination magnet" and the evidence bar for its OTHER candidate
+incoming edges is lowered too, since a bad edge already landing there is
+corroborating evidence the target attracts hallucinations. On the same
+real data, it blocks ~2.6× more edges than plain pruning (9847 vs. 3788
+across 15 splits) while keeping the pooled wrongly-blocked rate low (3.4%
+vs. 1.0%) and the SAME 11/15 split-reliability, with a slightly better
+mean FPR (62.0% vs. 63.5%) — a real, targeted improvement, not a full fix
+(the underlying 73% reliability is unchanged). On the synthetic benchmark
+it is statistically indistinguishable from plain pruning (no regression):
+sparse, locally-random noise rarely puts multiple suspect edges on one
+target, so the propagation step rarely fires. Available as
+`identify_and_prune_edges(..., use_propagation=True)`, opt-in rather than
+default since its benefit is specific to hub-heavy graphs.
+
+A supervised (logistic regression) classifier over the same
+per-edge features (false-vote count, bridge status, target centrality,
+path multiplicity) was also tried — cross-validated for stability across 5
+independent training runs on synthetic data (consistent results there) —
+but failed to generalize to the real data at all: it blocked zero edges
+until its per-feature normalization was manually rescaled to the real
+data's distribution, and even then performed *worse* than both raw and
+plain pruning (mean FPR 78.2%, vs. 69.6% raw). Not adopted: a fitted model
+failing this badly under distribution shift between synthetic training
+data and real deployment data is a real risk, not a validated alternative
+— recorded because a decision this consequential should show what was
+tried and rejected, not just what shipped.
+
 ### 7.2 Theorem J (Closure-Learning Completeness) — **keep**
 
 Turns the CLUTRR result of §4.4 into a theorem: closure learning is (i)
